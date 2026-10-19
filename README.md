@@ -3,7 +3,7 @@
 Civilization 6 (Gathering Storm) の**区域配置シミュレーター**です。React + Vite で作られており、GitHub Pages で静的配信できます。
 
 - **自由配置モード**: 地形・地物・資源・川・区域を自由に編集し、隣接合計を確認
-- **問題モード**: 6 つの定石テンプレートで最適配置を当てる学習用パズル
+- **問題モード**: 20 の定石テンプレートで最適配置を当てる学習用パズル
 - **最適化探索**: 区域＋資源/改善を最大 6 項目まで総当たり（枝刈り＋Web Worker）で最適配置を提案
 
 > 文明固有能力・指導者固有能力・政策カード・建造物による倍加は**未実装**（標準ルールのみ）。
@@ -114,7 +114,7 @@ npm run lint     # oxlint
 - 合計隣接ボーナス（SCORED 区域のみ）が最大になる配置を選びます
 - UI では最大 6 項目まで選べます（Web Worker による非同期探索で、枝刈りと時間・ノード数の予算つき）
 
-### 問題テンプレート (6 種)
+### 問題テンプレート (20 種)
 
 | id | 名前 | 配置区域 |
 |---|---|---|
@@ -124,6 +124,20 @@ npm run lint     # oxlint
 | culture | 遺産と劇場広場 | theater, entertainment, government |
 | harbor-hub | 港と商業ハブ | harbor, commercial |
 | twin-cities | 双子都市 | campus, holy_site, theater, government |
+| holy-mountain | 聖山の聖地 | holy_site, campus, government |
+| holy-forest | 深森の聖地 | holy_site, government |
+| reef-campus | 礁のキャンパス | campus, harbor, government |
+| geothermal-campus | 地熱キャンパス | campus, industrial, government |
+| rainforest-campus | 熱帯雨林キャンパス | campus, government |
+| city-harbor-commercial | 都心・港・商業トライアングル | harbor, commercial, government |
+| iz-full | 工業フルコンボ | industrial, aqueduct, dam, canal |
+| iz-mines | 鉱山工業地帯 | industrial, government |
+| theater-park | 劇場とウォーターパーク | theater, water_park, government |
+| theater-double | 二重遺産劇場 | theater, entertainment, government |
+| gov-hub | 政府ハブ | campus, commercial, industrial, government |
+| harbor-sea | 漁場の港 | harbor, commercial |
+| desert-faith | 砂漠の聖地と遺産 | holy_site, theater, government |
+| canal-iz | 運河工業地帯 | industrial, canal, dam |
 
 各テンプレートが定めるのは地形・川・固定区域のみで、正解（最適配置）は `optimize` が計算します。
 

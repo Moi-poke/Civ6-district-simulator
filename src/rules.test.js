@@ -16,6 +16,9 @@ describe("civ6lib parity: uniqueness + slots", () => {
     for (const d of ["campus", "holy_site", "government", "diplomatic", "encampment", "preserve", "aerodrome"]) {
       expect(isSpecialty(d)).toBe(true);
     }
+    expect(isSpecialty("wonder")).toBe(false);
+    expect(isSpecialty("wonder:pyramids")).toBe(false);
+    expect(isSpecialty("city")).toBe(false);
   });
   test("encampment/aerodrome/preserve are one-per-city; neighborhood is not", () => {
     expect(ONE_PER_CITY.has("encampment")).toBe(true);
@@ -221,6 +224,14 @@ describe("templates + solver", () => {
     expect(sol).not.toBeNull();
     expect(sol.total).toBeGreaterThanOrEqual(6);
   });
+  test("every template has a solution", () => {
+    for (const t of templates) {
+      const base = JSON.parse(JSON.stringify(t.tiles));
+      const rv = buildRivers(t.rivers.map(([a, b]) => ekey(a, b)));
+      const sol = optimize(base, rv, t.allowed, { nodes: 1500000, ms: 25000 });
+      expect(sol, `${t.id} unsolvable`).not.toBeNull();
+    }
+  }, 120000);
   test("twin-cities finds a solution within budget", () => {
     const t = templates.find((x) => x.id === "twin-cities");
     const base = JSON.parse(JSON.stringify(t.tiles));
