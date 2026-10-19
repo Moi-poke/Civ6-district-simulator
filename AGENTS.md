@@ -7,9 +7,9 @@ Civ6 (Gathering Storm) district adjacency puzzle lab. Single-page React app (Vit
 ## Architecture & Data Flow
 
 - Entry: `index.html` → `src/main.jsx` → `src/App.jsx` (default export `App`).
-- `src/App.jsx` is a ~750-line monolith: data definitions (`TERRAIN`, `FEATURES`, `EXTRAS`, `DISTRICTS`, `SCORED`, etc.), hex geometry, river graph (`buildRivers`), rule engine (`checkDistrict`, `validateAll`), scoring (`scoreAt`, `allScores`), solver (`optimize`), 5 puzzle templates, and the entire UI.
+- `src/App.jsx` is a ~1000-line monolith: data definitions (`TERRAIN`, `FEATURES`, `EXTRAS`, `DISTRICTS`, `SCORED`, etc.), hex geometry, river graph (`buildRivers`), rule engine (`checkDistrict`, `validateAll`), scoring (`scoreAt`, `allScores`), solver (`optimize`), 5 puzzle templates, and the entire UI.
 - State: local `useState` only (no store/context/router). `mode` (`sandbox`/`puzzle`), `map`/`rivers` (sandbox), `answer` (puzzle placements), `brush`, `ghost` (solver preview), etc.
-- Derived via `useMemo`: `activeMap`, `rv` (river graph), `scores`, `invalid`, `best` (puzzle optimum). Tile shape `{ t, f, x, d }` = terrain/feature/extra/district; `tileOf()` merges with `BLANK`.
+- Derived via `useMemo`: `activeMap`, `rv` (river graph), `scores`, `invalid`, `best` (puzzle optimum). Tile shape `{ t, f, x, d, pop? }` = terrain/feature/extra/district; `tileOf()` merges with `BLANK`.
 - Board: axial hex `(q,r)`, radius 3 (37 tiles). River edges are `ekey(a,b)` strings grouped into connected components via union-find.
 - Mutations are immutable spreads; `withDistrict()` strips removable extras/features on district placement.
 - UI primitives: `src/components/ui/button.jsx`, `src/components/ui/card.jsx` (minimal Tailwind wrappers).
@@ -21,6 +21,7 @@ Civ6 (Gathering Storm) district adjacency puzzle lab. Single-page React app (Vit
 - `public/` — static assets copied verbatim (`favicon.svg` used; `icons.svg` unused dead sprite).
 - `.github/workflows/` — `deploy.yml` (GitHub Pages).
 - Root configs: `vite.config.js`, `package.json`, `.oxlintrc.json`, `.gitignore`, `index.html`.
+- `skills/` — Civ6 rule reference (`civ6lib`, `hex-grid-spatial`); reference-only, not imported by the app.
 
 ## Development Commands
 
@@ -67,5 +68,4 @@ npm run lint         # oxlint
 ## Testing & QA
 
 - **No tests exist.** No test framework, config, or `test` script; CI only builds. Verification is `npm run build` + `npm run lint`.
-- Natural fit if adding tests: Vitest (Vite-native) in `vite.config.js`. High-value pure targets: `scoreAt`, `checkDistrict`, `optimize`, `buildRivers`, and the 5 templates.
-- oxlint does not cover formatting; lint is not currently wired into CI.<|end|><|start|>tool<|channel|>xml<|message|><rfl:parameter name="content">
+- Natural fit if adding tests: Vitest (Vite-native) in `vite.config.js`. High-value pure targets: `scoreAt`, `checkDistrict`, `optimize`, `buildRivers`, and the 6 templates.
