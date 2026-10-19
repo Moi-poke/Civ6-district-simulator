@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SolverWorker from "./solver.worker.js?worker";
 
 
-import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, key, coords, center, hexPoints, hexDist, EDGES, buildRivers, riverSides, citiesOf, cityOf, cityPop, tileOf, withDistrict, checkDistrict, validateAll, allScores, totalOf, optimize, templates, buildMap, riverList, WONDERS, HILLS_SHORT } from "./rules.js";
+import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, key, coords, center, hexPoints, hexDist, EDGES, buildRivers, riverSides, citiesOf, cityOf, citiesWithin, cityPop, tileOf, withDistrict, checkDistrict, validateAll, allScores, totalOf, optimize, templates, buildMap, riverList, WONDERS, HILLS_SHORT } from "./rules.js";
 
 
 /* =========================================================
@@ -521,6 +521,19 @@ export default function App() {
                       )}
                       {sel.d && sel.d !== "city" && (
                         <div className="text-xs text-slate-400 mt-1">所属：{cityOf(selected, activeMap) ? `${cityName(cityOf(selected, activeMap))}（距離 ${hexDist(selected, cityOf(selected, activeMap))}）` : "なし"}</div>
+                      )}
+                      {sel.d && sel.d !== "city" && citiesWithin(selected, activeMap).length > 1 && (
+                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-300">
+                          <span>所有都市</span>
+                          {citiesWithin(selected, activeMap).map((c) => (
+                            <button key={c} disabled={puzzle} onClick={() => setMap((m) => ({ ...m, [selected]: { ...tileOf(m, selected), owner: c } }))}
+                              className={`px-2 py-0.5 rounded ${cityOf(selected, activeMap) === c ? "bg-cyan-600" : "bg-slate-700"}`}>{cityName(c)}</button>
+                          ))}
+                          {tileOf(activeMap, selected).owner && (
+                            <button disabled={puzzle} onClick={() => setMap((m) => { const n = { ...tileOf(m, selected) }; delete n.owner; return { ...m, [selected]: n }; })}
+                              className="px-2 py-0.5 rounded bg-slate-700" title="自動に戻す">自動</button>
+                          )}
+                        </div>
                       )}
                     </div>
                     {invalid[selected] && <div className="mt-3 rounded-lg bg-rose-950 text-rose-300 p-2 text-sm">設置条件違反：{invalid[selected]}</div>}

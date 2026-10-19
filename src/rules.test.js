@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV,
   isSpecialty, buildRivers, checkDistrict, checkExtra, validateAll, scoreAt, optimize,
-  templates, hexDist, ekey,
+  templates, hexDist, ekey, cityOf, citiesWithin,
 } from "./rules.js";
 
 const city = (pop = 7) => ({ t: "grass", d: "city", pop });
@@ -160,6 +160,31 @@ describe("hills flag + tundra/snow", () => {
     const map = { "0,0": city(), "1,0": { t: "tundra" }, "2,0": { t: "snow" } };
     expect(checkDistrict(map, R(), "1,0", "campus")).toBeNull();
     expect(checkDistrict(map, R(), "2,0", "holy_site")).toBeNull();
+  });
+});
+
+describe("multi-city ownership", () => {
+  test("citiesWithin lists cities in range sorted by distance", () => {
+    const map = { "2,-1": city(), "-2,2": city() };
+    expect(citiesWithin("0,0", map).sort()).toEqual(["-2,2", "2,-1"].sort());
+    expect(citiesWithin("3,-1", map)).toEqual(["2,-1"]);
+  });
+  test("owner override wins when in range; invalid owner falls back", () => {
+    const map = { "2,-1": city(), "-2,2": city(), "0,0": { t: "grass", d: "campus", owner: "-2,2" } };
+    expect(cityOf("0,0", map)).toBe("-2,2");
+    const bad = { "2,-1": city(), "-2,2": city(), "0,0": { t: "grass", d: "campus", owner: "9,9" } };
+    expect(cityOf("0,0", bad)).toBe(citiesWithin("0,0", bad)[0]);
+  });
+  test("one-per-city counts per owner city", () => {
+    const map = {
+      "2,-1": city(10), "-2,2": city(10),
+      "1,0": { t: "grass", d: "campus", owner: "2,-1" },
+      "-1,1": { t: "grass", d: "theater" },
+    };
+    // campus owned by 2,-1; placing another campus near -2,2 must pass
+    expect(checkDistrict(map, R(), "-3,2", "campus")).toBeNull();
+    // but near 2,-1 must fail
+    expect(checkDistrict(map, R(), "3,-2", "campus")).toMatch(/1都市に1つ/);
   });
 });
 

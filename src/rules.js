@@ -179,14 +179,18 @@ const riverIdsOf = (rv, k) => {
   return DIRS.map(([dq, dr]) => ekey(k, key(q + dq, r + dr))).filter((e) => rv.set.has(e)).map((e) => rv.comp[e]);
 };
 const citiesOf = (map) => Object.keys(map).filter((k) => map[k] && map[k].d === "city");
+const citiesWithin = (k, map) => {
+  return citiesOf(map)
+    .map((c) => ({ c, d: hexDist(k, c) }))
+    .filter(({ d }) => d <= 3)
+    .sort((a, b) => a.d - b.d)
+    .map(({ c }) => c);
+};
 const cityOf = (k, map) => {
-  const cities = citiesOf(map);
-  let best = null, bestD = Infinity;
-  for (const c of cities) {
-    const d = hexDist(k, c);
-    if (d <= 3 && d < bestD) { bestD = d; best = c; }
-  }
-  return best;
+  const t = tileOf(map, k);
+  // owner が有効（3タイル圏内）ならそれを正とする
+  if (t.owner && citiesWithin(k, map).includes(t.owner)) return t.owner;
+  return citiesWithin(k, map)[0] || null;
 };
 const cityPop = (map, cityKey) => (cityKey ? (tileOf(map, cityKey).pop || 7) : 7);
 
@@ -644,4 +648,4 @@ templates.forEach((t) => {
   });
 });
 
-export { TERRAIN, FEATURES, EXTRAS, DISTRICTS, SCORED, COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, NON_SPECIALTY, isSpecialty, SIZE, DIRS, key, parse, coords, IN_GRID, neighbors, center, hexPoints, ekey, hexDist, EDGES, EDGE_BY_KEY, buildRivers, riverSides, riverIdsOf, citiesOf, cityOf, cityPop, BLANK, tileOf, withDistrict, checkDistrict, isWonderId, districtLabel, isFlatLand, HILLS_SHORT, isDistrictItem, isExtraItem, checkExtra, checkItem, applyItem, validateAll, scoreAt, allScores, totalOf, candidatesFor, itemConstrainedness, optimize, T, templates, buildMap, riverList, WONDERS };
+export { TERRAIN, FEATURES, EXTRAS, DISTRICTS, SCORED, COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, NON_SPECIALTY, isSpecialty, SIZE, DIRS, key, parse, coords, IN_GRID, neighbors, center, hexPoints, ekey, hexDist, EDGES, EDGE_BY_KEY, buildRivers, riverSides, riverIdsOf, citiesOf, cityOf, citiesWithin, cityPop, BLANK, tileOf, withDistrict, checkDistrict, isWonderId, districtLabel, isFlatLand, HILLS_SHORT, isDistrictItem, isExtraItem, checkExtra, checkItem, applyItem, validateAll, scoreAt, allScores, totalOf, candidatesFor, itemConstrainedness, optimize, T, templates, buildMap, riverList, WONDERS };
