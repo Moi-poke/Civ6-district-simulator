@@ -422,7 +422,7 @@ const templates = [
     allowed: ["campus", "holy_site", "theater", "government"],
     tiles: {
       "0,0": T("grass", { d: "city", pop: 7 }),
-      "-3,0": T("grass", { d: "city", pop: 7 }),
+      "-4,0": T("grass", { d: "city", pop: 7 }),
       "1,-1": T("mountain"), "-2,1": T("mountain"), "-4,1": T("mountain"),
       "-1,-1": T("plains", { f: "geothermal" }), "-4,-1": T("grass", { f: "natural_wonder" }),
     },
