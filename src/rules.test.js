@@ -227,5 +227,5 @@ describe("templates + solver", () => {
     const rv = buildRivers(t.rivers.map(([a, b]) => ekey(a, b)));
     const sol = optimize(base, rv, t.allowed, { nodes: 800000, ms: 15000 });
     expect(sol).not.toBeNull();
-  });
+  }, 30000);
 });

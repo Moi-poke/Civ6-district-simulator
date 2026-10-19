@@ -108,15 +108,19 @@ const isSpecialty = (d) => !!d && d !== "city" && d !== "wonder" && !NON_SPECIAL
 /* =========================================================
    ヘクス幾何
    ========================================================= */
-const SIZE = 37;
+const RADIUS = 5;
+const SIZE = 26;
 const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 const key = (q, r) => `${q},${r}`;
 const parse = (k) => k.split(",").map(Number);
 const coords = [];
-for (let q = -3; q <= 3; q++) for (let r = -3; r <= 3; r++) if (Math.abs(q + r) <= 3) coords.push({ q, r });
+for (let q = -RADIUS; q <= RADIUS; q++) for (let r = -RADIUS; r <= RADIUS; r++) if (Math.abs(q + r) <= RADIUS) coords.push({ q, r });
 const IN_GRID = new Set(coords.map(({ q, r }) => key(q, r)));
 const neighbors = (q, r) => DIRS.map(([dq, dr]) => key(q + dq, r + dr));
-const center = (q, r) => ({ x: 330 + SIZE * Math.sqrt(3) * (q + r / 2), y: 250 + SIZE * 1.5 * r });
+const BOARD_W = Math.ceil(SIZE * Math.sqrt(3) * (2 * RADIUS + 1) + SIZE * 2);
+const BOARD_H = Math.ceil(SIZE * 1.5 * (2 * RADIUS) + SIZE * 3.2);
+const center = (q, r) => ({ x: BOARD_W / 2 + SIZE * Math.sqrt(3) * (q + r / 2), y: BOARD_H / 2 + SIZE * 1.5 * r });
+const VIEWBOX = `0 0 ${BOARD_W} ${BOARD_H}`;
 const hexPoints = (x, y, s) => Array.from({ length: 6 }, (_, i) => {
   const a = (Math.PI / 180) * (60 * i - 30);
   return `${x + s * Math.cos(a)},${y + s * Math.sin(a)}`;
@@ -648,4 +652,4 @@ templates.forEach((t) => {
   });
 });
 
-export { TERRAIN, FEATURES, EXTRAS, DISTRICTS, SCORED, COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, NON_SPECIALTY, isSpecialty, SIZE, DIRS, key, parse, coords, IN_GRID, neighbors, center, hexPoints, ekey, hexDist, EDGES, EDGE_BY_KEY, buildRivers, riverSides, riverIdsOf, citiesOf, cityOf, citiesWithin, cityPop, BLANK, tileOf, withDistrict, checkDistrict, isWonderId, districtLabel, isFlatLand, HILLS_SHORT, isDistrictItem, isExtraItem, checkExtra, checkItem, applyItem, validateAll, scoreAt, allScores, totalOf, candidatesFor, itemConstrainedness, optimize, T, templates, buildMap, riverList, WONDERS };
+export { TERRAIN, FEATURES, EXTRAS, DISTRICTS, SCORED, COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, NON_SPECIALTY, isSpecialty, RADIUS, SIZE, BOARD_W, BOARD_H, VIEWBOX, DIRS, key, parse, coords, IN_GRID, neighbors, center, hexPoints, ekey, hexDist, EDGES, EDGE_BY_KEY, buildRivers, riverSides, riverIdsOf, citiesOf, cityOf, citiesWithin, cityPop, BLANK, tileOf, withDistrict, checkDistrict, isWonderId, districtLabel, isFlatLand, HILLS_SHORT, isDistrictItem, isExtraItem, checkExtra, checkItem, applyItem, validateAll, scoreAt, allScores, totalOf, candidatesFor, itemConstrainedness, optimize, T, templates, buildMap, riverList, WONDERS };

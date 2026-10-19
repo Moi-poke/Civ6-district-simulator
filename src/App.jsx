@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SolverWorker from "./solver.worker.js?worker";
 
 
-import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, key, coords, center, hexPoints, hexDist, EDGES, buildRivers, riverSides, citiesOf, cityOf, citiesWithin, cityPop, tileOf, withDistrict, checkDistrict, validateAll, allScores, totalOf, optimize, templates, buildMap, riverList, WONDERS, HILLS_SHORT } from "./rules.js";
+import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, VIEWBOX, key, coords, center, hexPoints, hexDist, EDGES, buildRivers, riverSides, citiesOf, cityOf, citiesWithin, cityPop, tileOf, withDistrict, checkDistrict, validateAll, allScores, totalOf, optimize, templates, buildMap, riverList, WONDERS, HILLS_SHORT } from "./rules.js";
 
 
 /* =========================================================
@@ -39,12 +39,12 @@ function HexLabel({ q, r, tile, score, ghost }) {
   const w = label ? 8 + label.length * 7 : 0;
   return (
     <g pointerEvents="none">
-      {sub && <text x={x} y={y - 17} textAnchor="middle" fontSize="9" fontWeight="700" fill="#0f172a">{sub}</text>}
-      <text x={x} y={y + 4} textAnchor="middle" fontSize={tile.d || ghost ? 15 : 12} fontWeight="800" fill={tile.d || ghost ? "#0f172a" : "#334155"} fillOpacity={tile.d || ghost ? 1 : 0.7}>{main}</text>
+      {sub && <text x={x} y={y - SIZE * 0.46} textAnchor="middle" fontSize="8" fontWeight="700" fill="#0f172a">{sub}</text>}
+      <text x={x} y={y + 3} textAnchor="middle" fontSize={tile.d || ghost ? 12 : 10} fontWeight="800" fill={tile.d || ghost ? "#0f172a" : "#334155"} fillOpacity={tile.d || ghost ? 1 : 0.7}>{main}</text>
       {label && (
         <>
-          <rect x={x - w / 2} y={y + 9} width={w} height={15} rx={7.5} fill="#0f172a" />
-          <text x={x} y={y + 20} textAnchor="middle" fontSize="11" fontWeight="800" fill="#ffffff">{label}</text>
+          <rect x={x - w / 2} y={y + 6} width={w} height={13} rx={6.5} fill="#0f172a" />
+          <text x={x} y={y + 16} textAnchor="middle" fontSize="10" fontWeight="800" fill="#ffffff">{label}</text>
         </>
       )}
     </g>
@@ -466,14 +466,14 @@ export default function App() {
                 <div className="text-xs text-slate-400">盤面の隣接合計</div>
                 <div className="text-2xl font-black text-cyan-300">+{total}{puzzle && best ? <span className="text-sm text-slate-400"> / 最適 {checked ? `+${best.total}` : "???"}</span> : null}</div>
               </div>
-              <svg viewBox="0 0 660 500" className="w-full bg-gradient-to-br from-emerald-950 to-slate-950">
+              <svg viewBox={VIEWBOX} className="w-full bg-gradient-to-br from-emerald-950 to-slate-950">
                 {coords.map(({ q, r }) => {
                   const k = key(q, r);
                   const g = ghost && ghost.placed[k];
                   return <HexTile key={k} k={k} q={q} r={r} tile={tileOf(activeMap, k)} selected={selected === k} invalid={!!invalid[k]} ghost={g} onClick={() => paint(k)} />;
                 })}
                 {EDGES.filter((e) => rv.set.has(e.k)).map((e) => (
-                  <line key={e.k} x1={e.p1.x} y1={e.p1.y} x2={e.p2.x} y2={e.p2.y} stroke="#1d4ed8" strokeWidth={6} strokeLinecap="round" pointerEvents="none" />
+                  <line key={e.k} x1={e.p1.x} y1={e.p1.y} x2={e.p2.x} y2={e.p2.y} stroke="#1d4ed8" strokeWidth={4.5} strokeLinecap="round" pointerEvents="none" />
                 ))}
                 {coords.map(({ q, r }) => {
                   const k = key(q, r);
@@ -482,7 +482,7 @@ export default function App() {
                 })}
                 {tab === "river" && !puzzle && EDGES.map((e) => (
                   <line key={`h-${e.k}`} x1={e.p1.x} y1={e.p1.y} x2={e.p2.x} y2={e.p2.y}
-                    stroke={hoverEdge === e.k ? "#93c5fd" : "transparent"} strokeWidth={11} strokeLinecap="round" className="cursor-pointer"
+                    stroke={hoverEdge === e.k ? "#93c5fd" : "transparent"} strokeWidth={9} strokeLinecap="round" className="cursor-pointer"
                     onMouseEnter={() => setHoverEdge(e.k)} onMouseLeave={() => setHoverEdge(null)} onClick={() => toggleRiver(e.k)} />
                 ))}
               </svg>
