@@ -16,6 +16,7 @@ const TERRAIN = {
   mountain: { label: "山岳", short: "山", color: "#78716c", land: true },
   coast: { label: "沿岸", short: "海", color: "#38bdf8", land: false },
   lake: { label: "湖", short: "湖", color: "#60a5fa", land: false },
+  blocked: { label: "使用不可", short: "禁", color: "#4b5563", land: true },
 };
 const FEATURES = {
   woods: { label: "森", short: "森" },
@@ -53,7 +54,7 @@ const DISTRICTS = {
 };
 const SCORED = new Set(["campus", "holy_site", "commercial", "harbor", "industrial", "theater"]);
 const COUNTS_AS_DISTRICT = new Set(["city", "campus", "holy_site", "commercial", "harbor", "industrial", "theater", "government", "aqueduct", "dam", "entertainment", "water_park", "canal", "encampment"]);
-const ONE_PER_CITY = new Set(["campus", "holy_site", "commercial", "harbor", "industrial", "theater", "aqueduct", "entertainment", "water_park"]);
+const ONE_PER_CITY = new Set(["campus", "holy_site", "commercial", "harbor", "industrial", "theater", "entertainment", "water_park"]);
 const REMOVABLE_EXTRAS = new Set(["mine", "quarry", "sea", "lumber_mill"]);
 const REMOVABLE_FEATURES = new Set(["woods", "rainforest", "marsh"]);
 const NON_SPECIALTY = new Set(["aqueduct", "dam", "canal", "spaceport", "neighborhood"]);
@@ -175,6 +176,7 @@ function checkDistrict(map, rv, k, d) {
   if (d === "city") {
     if (!TERRAIN[tile.t].land) return "都心は陸地にのみ建設できます";
     if (tile.t === "mountain") return "山岳に都心は建設できません";
+    if (tile.t === "blocked") return "使用不可タイルに都心は建設できません";
     if (tile.f === "natural_wonder") return "自然遺産の上に都心は建設できません";
     const otherCities = citiesOf(map).filter((c) => c !== k);
     for (const c of otherCities) if (hexDist(k, c) < 4) return "都心同士は4タイル以上離す必要があります";
@@ -183,6 +185,7 @@ function checkDistrict(map, rv, k, d) {
 
   // ユニバーサル制限
   if (tile.t === "mountain") return "山岳には区域・遺産を置けません";
+  if (tile.t === "blocked") return "使用不可タイルには区域・遺産を置けません";
   if (tile.f === "geothermal") return "地熱孔の上には区域・遺産を置けません";
   if (tile.f === "natural_wonder") return "自然遺産の上には区域・遺産を置けません";
   if (["luxury", "strategic", "strategic_mine"].includes(tile.x)) return "高級資源・戦略資源の上には区域を置けません";
@@ -196,7 +199,11 @@ function checkDistrict(map, rv, k, d) {
     if (!nks.some((n) => TERRAIN[tileOf(map, n).t].land)) return `${L}は陸地に隣接する水域タイルが必要です`;
   } else if (d === "canal") {
     if (!TERRAIN[tile.t].land) return "運河は陸地にのみ置けます";
-    if (!nks.some((n) => !TERRAIN[tileOf(map, n).t].land)) return "運河は水域に隣接している必要があります";
+    const waterN = nks.filter((n) => !TERRAIN[tileOf(map, n).t].land);
+    if (waterN.length < 1) return "運河は水域に隣接している必要があります";
+    const cityKey = cityOf(k, map);
+    const cityAdjacent = cityKey && nks.includes(cityKey);
+    if (!cityAdjacent && waterN.length < 2) return "運河は都心隣接または2つの水域に接する必要があります";
   } else if (!TERRAIN[tile.t].land) {
     return `${L}は水域に置けません（水域に置けるのは港・ウォーターパークのみ）`;
   }
@@ -204,16 +211,20 @@ function checkDistrict(map, rv, k, d) {
   if (d === "aqueduct") {
     const cityKey = cityOf(k, map);
     if (!nks.includes(cityKey)) return "用水路は都心に隣接している必要があります";
-    const fresh = riverSides(rv, k).some(Boolean) || nks.some((n) => {
-      const t = tileOf(map, n);
+    // 都心側の川辺を除く淡水源
+    const otherFresh = DIRS.some(([dq, dr]) => {
+      const nk = key(q + dq, r + dr);
+      if (nk === cityKey) return false;
+      if (rv.set.has(ekey(k, nk))) return true;
+      const t = tileOf(map, nk);
       return t.t === "lake" || t.t === "mountain" || t.f === "oasis";
     });
-    if (!fresh) return "用水路は川・湖・オアシス・山岳のいずれかに隣接している必要があります";
+    if (!otherFresh) return "用水路は都心側以外の川・湖・オアシス・山岳に隣接している必要があります";
   }
   if (d === "dam") {
     if (tile.t !== "flood") return "ダムは氾濫原タイルにのみ置けます";
     const s = riverSides(rv, k);
-    if (!s.some((v, i) => v && s[(i + 1) % 6])) return "ダムは川が連続する2辺以上に接している必要があります";
+    if (s.filter(Boolean).length < 2) return "ダムは川が2辺以上に接している必要があります";
     const mine = new Set(riverIdsOf(rv, k));
     if (others.some((o) => riverIdsOf(rv, o).some((id) => mine.has(id)))) return "1本の川に置けるダムは1つまでです";
   }
@@ -244,6 +255,30 @@ function checkDistrict(map, rv, k, d) {
   }
 
   return null;
+}
+
+function isDistrictItem(id) { return !!DISTRICTS[id]; }
+function isExtraItem(id) { return !!EXTRAS[id]; }
+function checkExtra(map, rv, k, x) {
+  const tile = tileOf(map, k);
+  if (tile.d && tile.d !== "city") return "区域のあるタイルに資源・改善は置けません";
+  if (tile.t === "mountain" || tile.t === "blocked") return "山岳・使用不可タイルには資源・改善を置けません";
+  if (x === "sea" && !["coast", "lake"].includes(tile.t)) return "海洋資源は水域専用です";
+  if (x !== "sea" && !TERRAIN[tile.t].land) return "陸地専用です";
+  if (x === "mine" && tile.t !== "hills") return "鉱山は丘陵にのみ建設できます";
+  if (x === "lumber_mill" && tile.f !== "woods") return "製材所は森タイルにのみ建設できます";
+  if (["luxury", "strategic", "strategic_mine"].includes(x) && tile.d) return "区域のあるタイルに資源・改善は置けません";
+  return null;
+}
+function checkItem(map, rv, k, item) {
+  if (isDistrictItem(item)) return checkDistrict(map, rv, k, item);
+  if (isExtraItem(item)) return checkExtra(map, rv, k, item);
+  return "未知の項目です";
+}
+function applyItem(map, k, item) {
+  if (isDistrictItem(item)) return withDistrict(map, k, item);
+  const t = tileOf(map, k);
+  return { ...map, [k]: { ...t, x: item } };
 }
 
 function validateAll(map, rv) {
@@ -310,7 +345,8 @@ function scoreAt(map, rv, k) {
   }
   if (d === "theater") {
     add(c((t) => t.d === "wonder"), 2, "遺産");
-    add(c((t) => t.d === "entertainment" || t.d === "water_park"), 2, "娯楽複合施設");
+    add(c((t) => t.d === "entertainment"), 2, "娯楽複合施設");
+    add(c((t) => t.d === "water_park"), 2, "ウォーターパーク");
   }
   add(c((t) => t.d === "government"), 1, "政府複合施設");
   minor(c((t) => COUNTS_AS_DISTRICT.has(t.d)), "隣接区域（都心・用水路・ダム含む）");
@@ -341,12 +377,12 @@ function optimize(baseMap, rv, list) {
       if (!best || total > best.total) best = { total, placed: { ...placed }, map };
       return;
     }
-    const d = list[i];
+    const item = list[i];
     for (const k of free) {
       if (placed[k]) continue;
-      if (checkDistrict(map, rv, k, d)) continue;
-      placed[k] = d;
-      rec(withDistrict(map, k, d), i + 1, placed);
+      if (checkItem(map, rv, k, item)) continue;
+      placed[k] = item;
+      rec(applyItem(map, k, item), i + 1, placed);
       delete placed[k];
     }
   };
@@ -421,10 +457,10 @@ const templates = [
     goal: "2都市でキャンパス・聖地・劇場広場を配置し合計を最大化",
     allowed: ["campus", "holy_site", "theater", "government"],
     tiles: {
-      "0,0": T("grass", { d: "city", pop: 7 }),
-      "-4,0": T("grass", { d: "city", pop: 7 }),
-      "1,-1": T("mountain"), "-2,1": T("mountain"), "-4,1": T("mountain"),
-      "-1,-1": T("plains", { f: "geothermal" }), "-4,-1": T("grass", { f: "natural_wonder" }),
+      "2,-1": T("grass", { d: "city", pop: 7 }),
+      "-2,2": T("grass", { d: "city", pop: 7 }),
+      "3,-2": T("mountain"), "-3,3": T("mountain"), "-1,1": T("mountain"),
+      "1,0": T("plains", { f: "geothermal" }), "-3,2": T("grass", { f: "natural_wonder" }),
     },
     rivers: [],
     note: "2都市それぞれ人口7（区域3枠）。聖地は自然遺産隣接で+2、森隣接で+0.5。都市間は4タイル以上離す。",
@@ -432,6 +468,12 @@ const templates = [
 ];
 const buildMap = (t) => JSON.parse(JSON.stringify(t.tiles));
 const riverList = (t) => t.rivers.map(([a, b]) => ekey(a, b));
+// テンプレートのタイルが盤面内か検証
+templates.forEach((t) => {
+  Object.keys(t.tiles).forEach((k) => {
+    if (!IN_GRID.has(k)) throw new Error(`${t.id}: off-board tile ${k}`);
+  });
+});
 
 /* =========================================================
    描画
@@ -498,6 +540,7 @@ export default function App() {
   const [msg, setMsg] = useState(null);
   const [checked, setChecked] = useState(false);
   const [optPick, setOptPick] = useState(["campus", "holy_site", "theater"]);
+  const [optExtraPick, setOptExtraPick] = useState([]);
   const [ghost, setGhost] = useState(null);
   const [hoverEdge, setHoverEdge] = useState(null);
 
@@ -516,6 +559,7 @@ export default function App() {
   const scores = useMemo(() => allScores(activeMap, rv), [activeMap, rv]);
   const invalid = useMemo(() => validateAll(activeMap, rv), [activeMap, rv]);
   const total = totalOf(scores);
+  const ghostScores = useMemo(() => (ghost ? allScores(ghost.map, rv) : null), [ghost, rv]);
   const best = useMemo(() => (puzzle ? optimize(puzzleBase, puzzleRivers, template.allowed) : null), [puzzle, puzzleBase, puzzleRivers, template]);
 
   const sel = selected ? tileOf(activeMap, selected) : null;
@@ -570,7 +614,7 @@ export default function App() {
       if (!land && next.x && next.x !== "sea") next.x = null;
       if (next.f === "oasis" && brush !== "desert") next.f = null;
       if (next.x === "mine" && brush !== "hills") next.x = null;
-      if (next.x === "lumber_mill" && brush !== "woods") next.x = null; // 製材所は森前提（簡略）
+      if (next.x === "lumber_mill" && next.f !== "woods") next.x = null; // 製材所は森前提
       if (brush === "flood" && !riverSides(rv, k).some(Boolean)) setMsg("注意：氾濫原は通常、川に接するタイルに生成されます");
       return setMap((m) => ({ ...m, [k]: next }));
     }
@@ -626,8 +670,9 @@ export default function App() {
   }
 
   function runOptimize() {
-    if (!optPick.length) return setMsg("探索する区域を選んでください");
-    const sol = optimize(map, rv, optPick);
+    const picks = [...optPick, ...optExtraPick];
+    if (!picks.length) return setMsg("探索する区域・資源/改善を選んでください");
+    const sol = optimize(map, rv, picks);
     if (!sol) { setGhost(null); return setMsg("条件を満たす配置がありません（設置制限・人口スロット・1都市1つ制限を確認）"); }
     setGhost(sol);
     setMsg(`探索完了：盤面全体の隣接合計 +${sol.total}（点線が提案位置）`);
@@ -697,19 +742,33 @@ export default function App() {
 
               {!puzzle && (
                 <div className="border-t border-slate-700 pt-3">
-                  <div className="font-bold text-sm flex items-center gap-2"><Search className="w-4 h-4 text-emerald-300" />最適配置を探索（最大3区域）</div>
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  <div className="font-bold text-sm flex items-center gap-2"><Search className="w-4 h-4 text-emerald-300" />最適配置を探索（区域＋資源/改善、最大4）</div>
+                  <div className="text-xs text-slate-400 mt-1">区域</div>
+                  <div className="flex flex-wrap gap-1 mt-1">
                     {OPTIMIZABLE.map((d) => {
                       const on = optPick.includes(d);
+                      const total = optPick.length + optExtraPick.length;
                       return (
-                        <button key={d} onClick={() => setOptPick((p) => (on ? p.filter((x) => x !== d) : p.length >= 3 ? p : [...p, d]))}
+                        <button key={d} onClick={() => { if (on) setOptPick((p) => p.filter((x) => x !== d)); else if (total < 4) setOptPick((p) => [...p, d]); else setMsg("探索は最大4項目までです"); }}
                           className={`px-2 py-1 rounded-lg text-xs font-bold border ${on ? "border-emerald-300 bg-emerald-500 text-slate-950" : "border-slate-600 text-slate-300"}`}>{DISTRICTS[d].label}</button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-2">資源・改善</div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {Object.keys(EXTRAS).map((x) => {
+                      const on = optExtraPick.includes(x);
+                      const total = optPick.length + optExtraPick.length;
+                      return (
+                        <button key={x} onClick={() => { if (on) setOptExtraPick((p) => p.filter((v) => v !== x)); else if (total < 4) setOptExtraPick((p) => [...p, x]); else setMsg("探索は最大4項目までです"); }}
+                          className={`px-2 py-1 rounded-lg text-xs font-bold border ${on ? "border-amber-300 bg-amber-500 text-slate-950" : "border-slate-600 text-slate-300"}`}>{EXTRAS[x].short} {EXTRAS[x].label}</button>
                       );
                     })}
                   </div>
                   <div className="flex gap-2 mt-2">
                     <Button size="sm" className="bg-emerald-600 flex-1" onClick={runOptimize}>探索</Button>
                     {ghost && <Button size="sm" className="bg-cyan-600 flex-1" onClick={() => { setMap(ghost.map); setGhost(null); setMsg(`適用しました：合計 +${ghost.total}`); }}>適用</Button>}
+                    {ghost && <Button size="sm" className="bg-slate-600 flex-1" onClick={() => { setGhost(null); setMsg("提案を破棄しました"); }}>破棄</Button>}
                   </div>
                 </div>
               )}
@@ -727,7 +786,7 @@ export default function App() {
               )}
               <div className="absolute top-3 right-3 z-10 rounded-xl bg-slate-950/90 px-3 py-2 border border-slate-600 text-right">
                 <div className="text-xs text-slate-400">盤面の隣接合計</div>
-                <div className="text-2xl font-black text-cyan-300">+{total}{puzzle && best ? <span className="text-sm text-slate-400"> / 最適 +{best.total}</span> : null}</div>
+                <div className="text-2xl font-black text-cyan-300">+{total}{puzzle && best ? <span className="text-sm text-slate-400"> / 最適 {checked ? `+${best.total}` : "???"}</span> : null}</div>
               </div>
               <svg viewBox="0 0 660 500" className="w-full bg-gradient-to-br from-emerald-950 to-slate-950">
                 {coords.map(({ q, r }) => {
@@ -740,7 +799,7 @@ export default function App() {
                 ))}
                 {coords.map(({ q, r }) => {
                   const k = key(q, r);
-                  const s = ghost ? allScores(ghost.map, rv)[k] : scores[k];
+                  const s = ghost ? (ghostScores ? ghostScores[k] : null) : scores[k];
                   return <HexLabel key={k} q={q} r={r} tile={tileOf(activeMap, k)} score={s ? s.value : null} ghost={ghost && ghost.placed[k]} />;
                 })}
                 {tab === "river" && !puzzle && EDGES.map((e) => (
@@ -794,6 +853,22 @@ export default function App() {
                     )}
                   </>
                 ) : <p className="text-slate-400">ヘクスをクリックしてください。</p>}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-900 border-slate-700 text-slate-100">
+              <CardHeader><CardTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-cyan-300" />都市一覧</CardTitle></CardHeader>
+              <CardContent>
+                {citiesOf(activeMap).length ? (
+                  <ul className="text-sm space-y-1">
+                    {citiesOf(activeMap).map((c, i) => {
+                      const pop = cityPop(activeMap, c);
+                      const max = 1 + Math.floor((pop - 1) / 3);
+                      const used = Object.keys(activeMap).filter((kk) => activeMap[kk] && activeMap[kk].d && isSpecialty(activeMap[kk].d) && cityOf(kk, activeMap) === c).length;
+                      return <li key={c}>都市{i + 1} ({c}) 人口 {pop} ／ 区域枠 {used}/{max}</li>;
+                    })}
+                  </ul>
+                ) : <p className="text-slate-400 text-sm">都心がありません</p>}
               </CardContent>
             </Card>
 
@@ -868,3 +943,5 @@ export default function App() {
     </div>
   );
 }
+
+export { checkDistrict, validateAll, scoreAt, allScores, optimize, buildRivers, withDistrict, tileOf, hexDist, cityOf, citiesOf, cityPop, checkExtra, checkItem, applyItem, isSpecialty, templates, TERRAIN, FEATURES, EXTRAS, DISTRICTS, SCORED, IN_GRID, coords, key, parse, neighbors, center };

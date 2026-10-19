@@ -69,4 +69,3 @@ npm run lint         # oxlint
 - **No tests exist.** No test framework, config, or `test` script; CI only builds. Verification is `npm run build` + `npm run lint`.
 - Natural fit if adding tests: Vitest (Vite-native) in `vite.config.js`. High-value pure targets: `scoreAt`, `checkDistrict`, `optimize`, `buildRivers`, and the 5 templates.
 - oxlint does not cover formatting; lint is not currently wired into CI.<|end|><|start|>tool<|channel|>xml<|message|><rfl:parameter name="content">
-Writing AGENTS.md at project root
