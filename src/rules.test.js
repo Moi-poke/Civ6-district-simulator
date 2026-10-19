@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
-  TERRAIN, DISTRICTS, WONDERS, SCORED, COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV,
+  DISTRICTS, WONDERS, COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV,
   isSpecialty, buildRivers, checkDistrict, checkExtra, validateAll, scoreAt, optimize,
-  templates, hexDist, ekey, withDistrict,
+  templates, hexDist, ekey,
 } from "./rules.js";
 
 const city = (pop = 7) => ({ t: "grass", d: "city", pop });
