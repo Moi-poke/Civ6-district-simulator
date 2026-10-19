@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SolverWorker from "./solver.worker.js?worker";
 
 
-import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, key, coords, center, hexPoints, hexDist, EDGES, buildRivers, riverSides, citiesOf, cityOf, cityPop, tileOf, withDistrict, checkDistrict, validateAll, allScores, totalOf, optimize, templates, buildMap, riverList, WONDERS } from "./rules.js";
+import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, key, coords, center, hexPoints, hexDist, EDGES, buildRivers, riverSides, citiesOf, cityOf, cityPop, tileOf, withDistrict, checkDistrict, validateAll, allScores, totalOf, optimize, templates, buildMap, riverList, WONDERS, HILLS_SHORT } from "./rules.js";
 
 
 /* =========================================================
@@ -32,7 +32,8 @@ function HexTile({ k: _k, q, r, tile, selected, invalid, ghost, onClick }) {
 function HexLabel({ q, r, tile, score, ghost }) {
   const { x, y } = center(q, r);
   const gIsExtra = ghost && !!EXTRAS[ghost];
-  const main = tile.d ? (dInfo(tile.d) || {}).short : ghost ? ((dInfo(ghost) || {}).short || TERRAIN[tile.t].short) : TERRAIN[tile.t].short;
+  const terrainShort = TERRAIN[tile.t].short + (tile.h ? HILLS_SHORT : "");
+  const main = tile.d ? (dInfo(tile.d) || {}).short : ghost ? ((dInfo(ghost) || {}).short || terrainShort) : terrainShort;
   const sub = [tile.f && FEATURES[tile.f].short, tile.x && EXTRAS[tile.x].short, (!tile.x && gIsExtra) && `(${EXTRAS[ghost].short})`].filter(Boolean).join("・");
   const label = score != null ? `+${score}` : null;
   const w = label ? 8 + label.length * 7 : 0;
@@ -153,6 +154,13 @@ export default function App() {
       return setMap(placed);
     }
     if (tab === "t") {
+      if (brush === "hills_toggle") {
+        if (!TERRAIN[tile.t].land || ["mountain", "blocked"].includes(tile.t)) return setMsg("丘陵は陸地（山岳・使用不可除く）にのみ設定できます");
+        if (tile.t === "flood" && !tile.h) return setMsg("氾濫原は丘陵にできません");
+        const toggled = !tile.h;
+        if (!toggled && tile.x === "mine") setMsg("丘陵を外したため鉱山は撤去されました");
+        return setMap((m) => ({ ...m, [k]: { ...tile, h: toggled, x: (!toggled && tile.x === "mine") ? null : tile.x } }));
+      }
       if (tile.d === "city" && !TERRAIN[brush].land) return setMsg("都心は陸地である必要があります");
       if (tile.d === "city" && brush === "mountain") return setMsg("山岳に都心は建設できません");
       if (tile.d === "city" && brush === "blocked") return setMsg("使用不可タイルに都心は建設できません");
@@ -164,7 +172,8 @@ export default function App() {
       if (land && next.x === "sea") next.x = null;
       if (!land && next.x && next.x !== "sea") next.x = null;
       if (next.f === "oasis" && brush !== "desert") next.f = null;
-      if (next.x === "mine" && brush !== "hills") next.x = null;
+      if (brush === "mountain" || brush === "flood" || !land) next.h = false;
+      if (next.x === "mine" && !next.h) next.x = null;
       if (next.x === "lumber_mill" && next.f !== "woods") next.x = null; // 製材所は森前提
       if (brush === "flood" && !riverSides(rv, k).some(Boolean)) setMsg("注意：氾濫原は通常、川に接するタイルに生成されます");
       return setMap((m) => ({ ...m, [k]: next }));
@@ -191,7 +200,7 @@ export default function App() {
       if (tile.t === "blocked") return setMsg("使用不可タイルには資源・改善を置けません");
       if (brush === "sea" && land) return setMsg("海洋資源は水域専用です");
       if (brush !== "sea" && !land) return setMsg(`${EXTRAS[brush].label}は陸地専用です`);
-      if (brush === "mine" && tile.t !== "hills") return setMsg("鉱山は丘陵にのみ建設できます");
+      if (brush === "mine" && !tile.h) return setMsg("鉱山は丘陵にのみ建設できます");
       if (brush === "lumber_mill" && tile.f !== "woods") return setMsg("製材所は森タイルにのみ建設できます");
       if (tile.d && tile.d !== "city") return setMsg("区域のあるタイルに資源・改善は置けません");
       if (tile.x && tile.x !== brush && tile.d !== "city") return setMsg("既存の資源・改善があります（先に消去してください）");
@@ -249,7 +258,7 @@ export default function App() {
   const brushList = (() => {
     if (puzzle) return [...template.allowed.map((id) => ({ id, ...dInfo(id) })), { id: "erase", label: "区域を消す", short: "×", color: "#e2e8f0" }];
     if (tab === "d") return [...PLACEABLE.map((id) => ({ id, ...dInfo(id) })), { id: "erase", label: "区域を消す", short: "×", color: "#e2e8f0" }];
-    if (tab === "t") return Object.entries(TERRAIN).map(([id, v]) => ({ id, ...v }));
+    if (tab === "t") return [...Object.entries(TERRAIN).map(([id, v]) => ({ id, ...v })), { id: "hills_toggle", label: "丘陵 切替", short: "丘切替", color: "#b9935a" }];
     if (tab === "f") return [...Object.entries(FEATURES).map(([id, v]) => ({ id, ...v, color: "#bbf7d0" })), { id: "none", label: "地物なし", short: "×", color: "#e2e8f0" }];
     if (tab === "x") return [...Object.entries(EXTRAS).map(([id, v]) => ({ id, ...v, color: "#e7e5e4" })), { id: "none", label: "資源・改善なし", short: "×", color: "#e2e8f0" }];
     return [];
@@ -411,7 +420,7 @@ export default function App() {
                 {sel ? (
                   <>
                     <div className="text-sm text-slate-300 space-y-1">
-                      <div>地形：{TERRAIN[sel.t].label}{sel.f ? ` ／ ${FEATURES[sel.f].label}` : ""}{sel.x ? ` ／ ${EXTRAS[sel.x].label}` : ""}</div>
+                      <div>地形：{TERRAIN[sel.t].label}{sel.h ? "（丘陵）" : ""}{sel.f ? ` ／ ${FEATURES[sel.f].label}` : ""}{sel.x ? ` ／ ${EXTRAS[sel.x].label}` : ""}</div>
                       <div>川に接する辺：{riverSides(rv, selected).filter(Boolean).length} 辺</div>
                       <div>区域：{sel.d ? (dInfo(sel.d) || {}).label : "なし"}</div>
                       {sel.d === "city" && (

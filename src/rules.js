@@ -5,7 +5,8 @@ const TERRAIN = {
   grass: { label: "草原", short: "草", color: "#a3d977", land: true },
   plains: { label: "平原", short: "平", color: "#d9d28a", land: true },
   desert: { label: "砂漠", short: "砂", color: "#f3e3a2", land: true },
-  hills: { label: "丘陵", short: "丘", color: "#b9935a", land: true },
+  tundra: { label: "ツンドラ", short: "ツ", color: "#d6cfae", land: true },
+  snow: { label: "雪原", short: "雪", color: "#f1f5f9", land: true },
   flood: { label: "氾濫原", short: "氾", color: "#c9e6a0", land: true },
   mountain: { label: "山岳", short: "山", color: "#78716c", land: true },
   coast: { label: "沿岸", short: "海", color: "#38bdf8", land: false },
@@ -57,7 +58,7 @@ const WONDERS = {
   pyramids: { label: "ピラミッド", short: "金", terrain: ["desert", "flood"], req: "砂漠または氾濫原" },
   petra: { label: "ペトラ", short: "ペ", terrain: ["desert", "flood"], req: "砂漠または氾濫原" },
   hanging_gardens: { label: "空中庭園", short: "空", river: true, req: "川に接する" },
-  oracle: { label: "神託", short: "託", terrain: ["hills"], req: "丘陵" },
+  oracle: { label: "神託", short: "託", hills: true, req: "丘陵" },
   stonehenge: { label: "ストーンヘンジ", short: "石遺", flat: true, adjExtra: ["quarry"], req: "平地・採石場に隣接" },
   great_library: { label: "大図書館", short: "図", flat: true, adjDistrict: ["campus"], req: "平地・キャンパスに隣接" },
   colosseum: { label: "コロッセオ", short: "闘", flat: true, adjDistrict: ["entertainment"], req: "平地・娯楽複合施設に隣接" },
@@ -73,9 +74,9 @@ const WONDERS = {
   mont_st_michel: { label: "モン・サン＝ミシェル", short: "修", terrain: ["flood"], feature: ["marsh"], req: "氾濫原または湿原" },
   etemenanki: { label: "エテメナンキ", short: "塔", terrain: ["flood"], feature: ["marsh"], req: "氾濫原または湿原" },
   angkor_wat: { label: "アンコールワット", short: "寺", adjDistrict: ["aqueduct"], req: "用水路に隣接" },
-  alhambra: { label: "アルハンブラ", short: "城", terrain: ["hills"], adjDistrict: ["encampment"], req: "丘陵・軍事基地に隣接" },
+  alhambra: { label: "アルハンブラ", short: "城", hills: true, adjDistrict: ["encampment"], req: "丘陵・軍事基地に隣接" },
   forbidden_city: { label: "紫禁城", short: "禁城", flat: true, adjCity: true, req: "平地・都心に隣接" },
-  potala: { label: "ポタラ宮", short: "宮", terrain: ["hills"], adjTerrain: ["mountain"], req: "丘陵・山岳に隣接" },
+  potala: { label: "ポタラ宮", short: "宮", hills: true, adjTerrain: ["mountain"], req: "丘陵・山岳に隣接" },
   bolshoi: { label: "ボリショイ劇場", short: "舞", flat: true, adjDistrict: ["theater"], req: "平地・劇場広場に隣接" },
   big_ben: { label: "ビッグベン", short: "時", river: true, adjDistrict: ["commercial"], req: "川・商業ハブに隣接" },
   hermitage: { label: "エルミタージュ", short: "美", river: true, req: "川に接する" },
@@ -83,7 +84,7 @@ const WONDERS = {
   ruhr: { label: "ルール渓谷", short: "炭", river: true, adjDistrict: ["industrial"], req: "川・工業地帯に隣接" },
   broadway: { label: "ブロードウェイ", short: "劇遺", flat: true, adjDistrict: ["theater"], req: "平地・劇場広場に隣接" },
   eiffel: { label: "エッフェル塔", short: "塔鉄", flat: true, adjCity: true, req: "平地・都心に隣接" },
-  cristo: { label: "キリスト像", short: "像", terrain: ["hills"], req: "丘陵" },
+  cristo: { label: "キリスト像", short: "像", hills: true, req: "丘陵" },
   statue_liberty: { label: "自由の女神像", short: "由", water: "coast", adjDistrict: ["harbor"], req: "沿岸（陸隣接）・港に隣接" },
   golden_gate: { label: "ゴールデンゲート", short: "橋", water: "coast", req: "沿岸（陸隣接）※直線条件は簡略" },
   sydney_opera: { label: "シドニーオペラハウス", short: "帆", water: "coast", adjDistrict: ["harbor"], req: "沿岸（陸隣接）・港に隣接" },
@@ -91,9 +92,9 @@ const WONDERS = {
   venetian: { label: "ヴェネツィア造船所", short: "船", water: "coast", adjDistrict: ["industrial"], req: "沿岸（陸隣接）・工業地帯に隣接" },
   torre_belem: { label: "ベレンの塔", short: "塔海", water: "coast", adjDistrict: ["harbor"], req: "沿岸（陸隣接）・港に隣接" },
   huey: { label: "ウエイ・テオカリ", short: "湖遺", water: "lake", req: "湖（陸隣接）" },
-  jebel_barkal: { label: "ジェベル・バルカル", short: "岩", terrain: ["hills"], desert: true, req: "砂漠の丘陵" },
+  jebel_barkal: { label: "ジェベル・バルカル", short: "岩", terrain: ["desert"], hills: true, req: "砂漠の丘陵" },
   kotokuin: { label: "鎌倉大仏", short: "仏", adjDistrict: ["holy_site"], req: "聖地に隣接" },
-  sankore: { label: "サンゴレ大学", short: "学", terrain: ["desert", "hills"], adjDistrict: ["campus"], req: "砂漠(丘含)・キャンパスに隣接" },
+  sankore: { label: "サンゴレ大学", short: "学", terrain: ["desert"], adjDistrict: ["campus"], req: "砂漠（丘陵可）・キャンパスに隣接" },
 };
 const SCORED = new Set(["campus", "holy_site", "commercial", "harbor", "industrial", "theater"]);
 const COUNTS_AS_DISTRICT = new Set(["city", "campus", "holy_site", "commercial", "harbor", "industrial", "theater", "government", "aqueduct", "dam", "entertainment", "water_park", "canal", "encampment", "aerodrome", "spaceport", "neighborhood", "preserve", "diplomatic"]);
@@ -192,7 +193,7 @@ const cityPop = (map, cityKey) => (cityKey ? (tileOf(map, cityKey).pop || 7) : 7
 /* =========================================================
    タイル・配置判定
    ========================================================= */
-const BLANK = { t: "grass", f: null, x: null, d: null };
+const BLANK = { t: "grass", h: false, f: null, x: null, d: null };
 const tileOf = (map, k) => ({ ...BLANK, ...(map[k] || {}) });
 
 function withDistrict(map, k, d) {
@@ -218,7 +219,8 @@ const districtLabel = (d) => {
   if (wk && WONDERS[wk]) return WONDERS[wk].label;
   return d;
 };
-const isFlatLand = (tile) => TERRAIN[tile.t].land && tile.t !== "hills" && tile.t !== "mountain" && tile.t !== "blocked";
+const isFlatLand = (tile) => TERRAIN[tile.t].land && !tile.h && tile.t !== "mountain" && tile.t !== "blocked";
+const HILLS_SHORT = "丘";
 
 function checkWonder(map, rv, k, wk, nks) {
   const tile = tileOf(map, k);
@@ -227,12 +229,13 @@ function checkWonder(map, rv, k, wk, nks) {
   if (w.terrain && !(w.terrain.includes(tile.t) || (w.feature && w.feature.includes(tile.f)))) return `${w.label}は${w.req}に建設する必要があります`;
   if (!w.terrain && w.feature && !w.feature.includes(tile.f)) return `${w.label}は${w.req}に建設する必要があります`;
   if (w.flat && !isFlatLand(tile)) return `${w.label}は${w.req}に建設する必要があります`;
+  if (w.hills && !tile.h) return `${w.label}は${w.req}に建設する必要があります`;
   if (w.water) {
     if (tile.t !== w.water) return `${w.label}は${w.req}に建設する必要があります`;
     if (!nks.some((n) => TERRAIN[tileOf(map, n).t].land)) return `${w.label}は陸地に隣接する水域タイルが必要です`;
   }
   if (w.river && !riverSides(rv, k).some(Boolean)) return `${w.label}は${w.req}に建設する必要があります`;
-  if (w.desert && tile.t !== "desert" && !(tile.t === "hills")) return `${w.label}は${w.req}に建設する必要があります`;
+  if (w.desert && tile.t !== "desert") return `${w.label}は${w.req}に建設する必要があります`;
   if (w.adjCity && !nks.some((n) => tileOf(map, n).d === "city")) return `${w.label}は${w.req}に建設する必要があります`;
   if (w.adjDistrict && !nks.some((n) => w.adjDistrict.includes(tileOf(map, n).d))) return `${w.label}は${w.req}に建設する必要があります`;
   if (w.adjTerrain && !nks.some((n) => w.adjTerrain.includes(tileOf(map, n).t))) return `${w.label}は${w.req}に建設する必要があります`;
@@ -363,7 +366,7 @@ function checkExtra(map, rv, k, x) {
   if (tile.t === "mountain" || tile.t === "blocked") return "山岳・使用不可タイルには資源・改善を置けません";
   if (x === "sea" && !["coast", "lake"].includes(tile.t)) return "海洋資源は水域専用です";
   if (x !== "sea" && !TERRAIN[tile.t].land) return "陸地専用です";
-  if (x === "mine" && tile.t !== "hills") return "鉱山は丘陵にのみ建設できます";
+  if (x === "mine" && !tile.h) return "鉱山は丘陵にのみ建設できます";
   if (x === "lumber_mill" && tile.f !== "woods") return "製材所は森タイルにのみ建設できます";
   if (["luxury", "strategic", "strategic_mine"].includes(x) && tile.d) return "区域のあるタイルに資源・改善は置けません";
   return null;
@@ -472,7 +475,7 @@ function candidatesFor(baseMap, k, item) {
     if ((item === "harbor" || item === "water_park") && !["coast", "lake"].includes(t.t)) return false;
     if (item === "dam" && t.t !== "flood") return false;
     if (item === "canal" && !TERRAIN[t.t].land) return false;
-    if ((item === "aerodrome" || item === "spaceport") && (t.t === "hills" || t.t === "mountain" || !TERRAIN[t.t].land)) return false;
+    if ((item === "aerodrome" || item === "spaceport") && !isFlatLand(t)) return false;
     if (item !== "harbor" && item !== "water_park" && !TERRAIN[t.t].land && !(typeof item === "string" && item.startsWith("wonder:") && WONDERS[item.slice(7)] && WONDERS[item.slice(7)].water)) return false;
   } else {
     const err = checkExtra(baseMap, null, k, item);
@@ -562,7 +565,7 @@ const templates = [
     name: "川沿い商業ハブ三角形",
     goal: "商業ハブ・キャンパス・政府複合施設を置き、隣接ボーナス合計を最大化",
     allowed: ["commercial", "campus", "government"],
-    tiles: { "0,0": T("grass", { d: "city", pop: 7 }), "-1,2": T("mountain"), "0,2": T("mountain"), "2,1": T("hills", { x: "mine" }), "-2,0": T("plains", { f: "woods" }) },
+    tiles: { "0,0": T("grass", { d: "city", pop: 7 }), "-1,2": T("mountain"), "0,2": T("mountain"), "2,1": T("grass", { h: true, x: "mine" }), "-2,0": T("plains", { f: "woods" }) },
     rivers: [["1,0", "2,0"], ["1,0", "2,-1"], ["2,0", "2,-1"], ["2,0", "3,-1"]],
     note: "商業ハブは川の辺に接するタイルで+2。政府複合施設は隣接する専門区域すべてに+1。",
   },
@@ -573,7 +576,7 @@ const templates = [
     allowed: ["industrial", "aqueduct", "dam"],
     tiles: {
       "0,0": T("grass", { d: "city", pop: 7 }), "2,-1": T("flood"), "2,-2": T("flood"), "3,-1": T("flood"),
-      "0,1": T("hills", { x: "mine" }), "1,1": T("hills", { x: "mine" }), "2,0": T("plains", { x: "luxury" }),
+      "0,1": T("grass", { h: true, x: "mine" }), "1,1": T("plains", { h: true, x: "mine" }), "2,0": T("plains", { x: "luxury" }),
     },
     rivers: [["2,-1", "3,-2"], ["2,-1", "2,-2"], ["2,-1", "1,-1"], ["1,-1", "1,-2"]],
     note: "ダムは氾濫原＋川が2辺以上に接する。用水路は都心隣接＋淡水源。両方に接する位置に工業地帯を置く。",
@@ -595,7 +598,7 @@ const templates = [
     name: "遺産と劇場広場",
     goal: "劇場広場・娯楽複合施設・政府複合施設で文化力を最大化",
     allowed: ["theater", "entertainment", "government"],
-    tiles: { "0,0": T("grass", { d: "city", pop: 7 }), "1,0": T("grass", { d: "wonder" }), "2,-2": T("plains", { d: "wonder" }), "-1,0": T("hills", { x: "mine" }) },
+    tiles: { "0,0": T("grass", { d: "city", pop: 7 }), "1,0": T("grass", { d: "wonder" }), "2,-2": T("plains", { d: "wonder" }), "-1,0": T("plains", { h: true, x: "mine" }) },
     rivers: [],
     note: "劇場広場は遺産1つにつき+2、娯楽複合施設にも+2。遺産は区域ではないので「隣接区域」には数えない。",
   },
@@ -641,4 +644,4 @@ templates.forEach((t) => {
   });
 });
 
-export { TERRAIN, FEATURES, EXTRAS, DISTRICTS, SCORED, COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, NON_SPECIALTY, isSpecialty, SIZE, DIRS, key, parse, coords, IN_GRID, neighbors, center, hexPoints, ekey, hexDist, EDGES, EDGE_BY_KEY, buildRivers, riverSides, riverIdsOf, citiesOf, cityOf, cityPop, BLANK, tileOf, withDistrict, checkDistrict, isWonderId, districtLabel, isFlatLand, isDistrictItem, isExtraItem, checkExtra, checkItem, applyItem, validateAll, scoreAt, allScores, totalOf, candidatesFor, itemConstrainedness, optimize, T, templates, buildMap, riverList, WONDERS };
+export { TERRAIN, FEATURES, EXTRAS, DISTRICTS, SCORED, COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, NON_SPECIALTY, isSpecialty, SIZE, DIRS, key, parse, coords, IN_GRID, neighbors, center, hexPoints, ekey, hexDist, EDGES, EDGE_BY_KEY, buildRivers, riverSides, riverIdsOf, citiesOf, cityOf, cityPop, BLANK, tileOf, withDistrict, checkDistrict, isWonderId, districtLabel, isFlatLand, HILLS_SHORT, isDistrictItem, isExtraItem, checkExtra, checkItem, applyItem, validateAll, scoreAt, allScores, totalOf, candidatesFor, itemConstrainedness, optimize, T, templates, buildMap, riverList, WONDERS };

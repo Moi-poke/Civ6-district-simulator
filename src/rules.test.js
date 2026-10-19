@@ -43,7 +43,7 @@ describe("placement: new districts", () => {
     expect(checkDistrict(map, R(), "2,0", "preserve")).toBeNull();
   });
   test("aerodrome/spaceport require flat land", () => {
-    const map = { "0,0": city(), "1,0": { t: "hills" } };
+    const map = { "0,0": city(), "1,0": { t: "grass", h: true } };
     expect(checkDistrict(map, R(), "1,0", "aerodrome")).toMatch(/平地/);
     expect(checkDistrict(map, R(), "1,0", "spaceport")).toMatch(/平地/);
     expect(checkDistrict(map, R(), "-1,0", "aerodrome")).toBeNull();
@@ -64,8 +64,8 @@ describe("placement: new districts", () => {
 });
 
 describe("placement: wonders", () => {
-  test("pyramids needs desert/flood; oracle needs hills", () => {
-    const map = { "0,0": city(), "1,0": { t: "desert" }, "2,0": { t: "hills" } };
+  test("pyramids needs desert/flood; oracle needs hills flag", () => {
+    const map = { "0,0": city(), "1,0": { t: "desert" }, "2,0": { t: "plains", h: true } };
     expect(checkDistrict(map, R(), "1,0", "wonder:pyramids")).toBeNull();
     expect(checkDistrict(map, R(), "0,1", "wonder:pyramids")).toMatch(/砂漠または氾濫原/);
     expect(checkDistrict(map, R(), "2,0", "wonder:oracle")).toBeNull();
@@ -141,6 +141,25 @@ describe("adjacency", () => {
       "2,0": { t: "desert", d: "wonder:pyramids" },
     };
     expect(scoreAt(map, R(), "1,0").value).toBe(2);
+  });
+});
+
+describe("hills flag + tundra/snow", () => {
+  test("jebel barkal needs desert hills", () => {
+    const map = { "0,0": city(), "1,0": { t: "desert", h: true }, "2,0": { t: "desert" }, "0,1": { t: "plains", h: true } };
+    expect(checkDistrict(map, R(), "1,0", "wonder:jebel_barkal")).toBeNull();
+    expect(checkDistrict(map, R(), "2,0", "wonder:jebel_barkal")).toMatch(/砂漠の丘陵/);
+    expect(checkDistrict(map, R(), "0,1", "wonder:jebel_barkal")).toMatch(/砂漠の丘陵/);
+  });
+  test("mine needs hills flag on any base terrain", () => {
+    const map = { "0,0": city(), "1,0": { t: "desert", h: true } };
+    expect(checkExtra(map, R(), "1,0", "mine")).toBeNull();
+    expect(checkExtra(map, R(), "0,1", "mine")).toMatch(/丘陵/);
+  });
+  test("tundra/snow are placeable land", () => {
+    const map = { "0,0": city(), "1,0": { t: "tundra" }, "2,0": { t: "snow" } };
+    expect(checkDistrict(map, R(), "1,0", "campus")).toBeNull();
+    expect(checkDistrict(map, R(), "2,0", "holy_site")).toBeNull();
   });
 });
 
