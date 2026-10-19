@@ -7,7 +7,7 @@ Civ6 (Gathering Storm) district adjacency puzzle lab. Single-page React app (Vit
 ## Architecture & Data Flow
 
 - Entry: `index.html` → `src/main.jsx` → `src/App.jsx` (default export `App`).
-- `src/App.jsx` is a ~1000-line monolith: data definitions (`TERRAIN`, `FEATURES`, `EXTRAS`, `DISTRICTS`, `SCORED`, etc.), hex geometry, river graph (`buildRivers`), rule engine (`checkDistrict`, `validateAll`), scoring (`scoreAt`, `allScores`), solver (`optimize`), 5 puzzle templates, and the entire UI.
+- `src/App.jsx` is a rules engine (`src/rules.js`) + UI (`src/App.jsx`): data definitions (`TERRAIN`, `FEATURES`, `EXTRAS`, `DISTRICTS`, `SCORED`, etc.), hex geometry, river graph (`buildRivers`), rule engine (`checkDistrict`, `validateAll`), scoring (`scoreAt`, `allScores`), solver (`optimize`), 5 puzzle templates, and the entire UI.
 - State: local `useState` only (no store/context/router). `mode` (`sandbox`/`puzzle`), `map`/`rivers` (sandbox), `answer` (puzzle placements), `brush`, `ghost` (solver preview), etc.
 - Derived via `useMemo`: `activeMap`, `rv` (river graph), `scores`, `invalid`, `best` (puzzle optimum). Tile shape `{ t, f, x, d, pop? }` = terrain/feature/extra/district; `tileOf()` merges with `BLANK`.
 - Board: axial hex `(q,r)`, radius 3 (37 tiles). River edges are `ekey(a,b)` strings grouped into connected components via union-find.
@@ -50,7 +50,10 @@ npm run lint         # oxlint
 
 ## Important Files
 
-- `src/App.jsx` — entire app logic + UI.
+- `src/rules.js` — rule engine (placement/scoring/solver/templates), pure + testable.
+- `src/App.jsx` — UI only (imports from `./rules.js`).
+- `src/solver.worker.js` — Web Worker entry for `optimize`.
+- `src/rules.test.js` — Vitest regression tests (`npm test`).
 - `src/main.jsx` — root render with `StrictMode`.
 - `src/index.css` — Tailwind entry.
 - `vite.config.js` — `base: './'`, plugins, `@` alias.
@@ -67,5 +70,5 @@ npm run lint         # oxlint
 
 ## Testing & QA
 
-- **No tests exist.** No test framework, config, or `test` script; CI only builds. Verification is `npm run build` + `npm run lint`.
+- **Vitest** (`npm test`, `src/rules.test.js`, 22 tests) covers placement/scoring/solver/templates. CI runs `npm run lint` + `npm run build` (tests local-only for now).
 - Natural fit if adding tests: Vitest (Vite-native) in `vite.config.js`. High-value pure targets: `scoreAt`, `checkDistrict`, `optimize`, `buildRivers`, and the 6 templates.
