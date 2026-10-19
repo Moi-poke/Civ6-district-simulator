@@ -273,7 +273,7 @@ export default function App() {
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <div className="text-cyan-300 text-sm font-bold tracking-widest">GATHERING STORM / 標準ルール学習用</div>
-            <h1 className="text-3xl md:text-5xl font-black mt-1">Civ6 区域パズル・ラボ</h1>
+            <h1 className="text-3xl md:text-5xl font-black mt-1">Civ6 区域配置シミュレーター</h1>
             <p className="text-slate-400 mt-2">川はヘクスの「辺」、設置条件は区域ごとに判定。置けない場所は理由を表示します。複数都市対応（間隔4以上）。</p>
           </div>
           <div className="flex gap-2">

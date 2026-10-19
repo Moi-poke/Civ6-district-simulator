@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Civ6 (Gathering Storm) district adjacency puzzle lab. Single-page React app (Vite) for learning/placing district adjacency bonuses, validating placement rules, and brute-forcing optimal layouts. Standard rules only (no civ/leader abilities, policies, or building multipliers). UI and docs are in Japanese.
+Civ6 (Gathering Storm) district placement simulator (区域配置シミュレーター). Single-page React app (Vite) for editing district layouts, calculating adjacency bonuses, validating placement rules, and brute-forcing optimal placements. Standard rules only (no civ/leader abilities, policies, or building multipliers). UI and docs are in Japanese.
 
 ## Architecture & Data Flow
 
