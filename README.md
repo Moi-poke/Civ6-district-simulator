@@ -135,14 +135,13 @@ npm run preview  # ビルド結果の確認
 │   ├── main.jsx
 │   ├── index.css
 │   └── components/ui/          # Button, Card (shadcn 風の最小実装)
-├── .github/workflows/deploy.yml
-├── vite.config.js
-├── package.json
-└── README.md
-```
+### 追加実装（2026-10 更新）
+
+- **宗教・文化系区域**: 聖地（Holy Site, +信仰）を追加。劇場広場は遺産・娯楽複合施設・ウォーターパークに +2。
+- **複数都市**: 都心を複数配置可能（最小間隔 4 タイル）。区域は都心から 3 タイル以内。人口スロット制（`1 + floor((pop-1)/3)`）。
+- **追加区域**: 運河（工業地帯 +2）、ウォーターパーク（沿岸/湖、劇場広場 +2）、自然遺産地物（聖地 +2）。
+- **人口**: 都心タイル選択時に +/- で人口を変更（自由配置モード）。
 
 ## ライセンス
 
 個人学習用プロジェクト。Civilization VI は Firaxis Games / 2K の商標です。
-EOF
-echo done

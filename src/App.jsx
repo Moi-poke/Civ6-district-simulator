@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { RotateCcw, Lightbulb, Trophy, CheckCircle2, Info, ChevronRight, Waves, AlertTriangle, Search } from "lucide-react";
+import { RotateCcw, Lightbulb, Trophy, CheckCircle2, Info, ChevronRight, Waves, AlertTriangle, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -24,6 +24,7 @@ const FEATURES = {
   oasis: { label: "オアシス", short: "オ" },
   geothermal: { label: "地熱孔", short: "熱" },
   reef: { label: "礁", short: "礁" },
+  natural_wonder: { label: "自然遺産", short: "自" },
 };
 const EXTRAS = {
   mine: { label: "鉱山", short: "鉱" },
@@ -32,10 +33,12 @@ const EXTRAS = {
   strategic_mine: { label: "戦略資源＋鉱山", short: "戦鉱" },
   luxury: { label: "高級資源", short: "高" },
   sea: { label: "海洋資源", short: "魚" },
+  lumber_mill: { label: "製材所", short: "材" },
 };
 const DISTRICTS = {
   city: { label: "都心", short: "都", color: "#fde68a" },
   campus: { label: "キャンパス", short: "科", color: "#60a5fa" },
+  holy_site: { label: "聖地", short: "聖", color: "#c4b5fd" },
   commercial: { label: "商業ハブ", short: "商", color: "#fbbf24" },
   harbor: { label: "港", short: "港", color: "#0ea5e9" },
   industrial: { label: "工業地帯", short: "工", color: "#f97316" },
@@ -44,13 +47,17 @@ const DISTRICTS = {
   aqueduct: { label: "用水路", short: "水", color: "#a5f3fc" },
   dam: { label: "ダム", short: "堰", color: "#67e8f9" },
   entertainment: { label: "娯楽複合施設", short: "娯", color: "#fb7185" },
+  water_park: { label: "ウォーターパーク", short: "水楽", color: "#38bdf8" },
+  canal: { label: "運河", short: "運", color: "#22d3ee" },
   wonder: { label: "遺産", short: "遺", color: "#facc15" },
 };
-const SCORED = new Set(["campus", "commercial", "harbor", "industrial", "theater"]);
-const COUNTS_AS_DISTRICT = new Set(["city", "campus", "commercial", "harbor", "industrial", "theater", "government", "aqueduct", "dam", "entertainment"]);
-const ONE_PER_CITY = new Set(["campus", "commercial", "harbor", "industrial", "theater", "aqueduct", "entertainment"]);
-const REMOVABLE_EXTRAS = new Set(["mine", "quarry", "sea"]);
+const SCORED = new Set(["campus", "holy_site", "commercial", "harbor", "industrial", "theater"]);
+const COUNTS_AS_DISTRICT = new Set(["city", "campus", "holy_site", "commercial", "harbor", "industrial", "theater", "government", "aqueduct", "dam", "entertainment", "water_park", "canal", "encampment"]);
+const ONE_PER_CITY = new Set(["campus", "holy_site", "commercial", "harbor", "industrial", "theater", "aqueduct", "entertainment", "water_park"]);
+const REMOVABLE_EXTRAS = new Set(["mine", "quarry", "sea", "lumber_mill"]);
 const REMOVABLE_FEATURES = new Set(["woods", "rainforest", "marsh"]);
+const NON_SPECIALTY = new Set(["aqueduct", "dam", "canal", "spaceport", "neighborhood"]);
+const isSpecialty = (d) => !!d && d !== "city" && d !== "wonder" && !NON_SPECIALTY.has(d);
 
 /* =========================================================
    ヘクス幾何
@@ -69,6 +76,11 @@ const hexPoints = (x, y, s) => Array.from({ length: 6 }, (_, i) => {
   return `${x + s * Math.cos(a)},${y + s * Math.sin(a)}`;
 }).join(" ");
 const ekey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+const hexDist = (a, b) => {
+  const [q1, r1] = parse(a); const [q2, r2] = parse(b);
+  const dq = q1 - q2, dr = r1 - r2;
+  return (Math.abs(dq) + Math.abs(dq + dr) + Math.abs(dr)) / 2;
+};
 
 const EDGES = (() => {
   const out = [];
@@ -120,6 +132,17 @@ const riverIdsOf = (rv, k) => {
   const [q, r] = parse(k);
   return DIRS.map(([dq, dr]) => ekey(k, key(q + dq, r + dr))).filter((e) => rv.set.has(e)).map((e) => rv.comp[e]);
 };
+const citiesOf = (map) => Object.keys(map).filter((k) => map[k] && map[k].d === "city");
+const cityOf = (k, map) => {
+  const cities = citiesOf(map);
+  let best = null, bestD = Infinity;
+  for (const c of cities) {
+    const d = hexDist(k, c);
+    if (d <= 3 && d < bestD) { bestD = d; best = c; }
+  }
+  return best;
+};
+const cityPop = (map, cityKey) => (cityKey ? (tileOf(map, cityKey).pop || 7) : 7);
 
 /* =========================================================
    タイル・配置判定
@@ -136,6 +159,7 @@ function withDistrict(map, k, d) {
       d,
       x: REMOVABLE_EXTRAS.has(t.x) ? null : t.x,
       f: REMOVABLE_FEATURES.has(t.f) ? null : t.f,
+      pop: d === "city" ? (t.pop || 7) : t.pop,
     },
   };
 }
@@ -147,22 +171,39 @@ function checkDistrict(map, rv, k, d) {
   const others = Object.entries(map).filter(([kk, v]) => kk !== k && v && v.d === d).map(([kk]) => kk);
   const L = DISTRICTS[d].label;
 
-  if (d === "city") return "このラボでは都心は中央固定です";
-  if (k === "0,0") return "都心タイルには置けません";
+  // 都心の設置
+  if (d === "city") {
+    if (!TERRAIN[tile.t].land) return "都心は陸地にのみ建設できます";
+    if (tile.t === "mountain") return "山岳に都心は建設できません";
+    if (tile.f === "natural_wonder") return "自然遺産の上に都心は建設できません";
+    const otherCities = citiesOf(map).filter((c) => c !== k);
+    for (const c of otherCities) if (hexDist(k, c) < 4) return "都心同士は4タイル以上離す必要があります";
+    return null;
+  }
+
+  // ユニバーサル制限
   if (tile.t === "mountain") return "山岳には区域・遺産を置けません";
   if (tile.f === "geothermal") return "地熱孔の上には区域・遺産を置けません";
+  if (tile.f === "natural_wonder") return "自然遺産の上には区域・遺産を置けません";
   if (["luxury", "strategic", "strategic_mine"].includes(tile.x)) return "高級資源・戦略資源の上には区域を置けません";
 
-  if (d === "harbor") {
-    if (!["coast", "lake"].includes(tile.t)) return "港は沿岸または湖タイルにのみ置けます";
-    if (tile.f === "reef") return "礁の上には港を置けません";
-    if (!nks.some((n) => TERRAIN[tileOf(map, n).t].land)) return "港は陸地に隣接する水域タイルが必要です";
+  // 都心からの距離 3 タイル
+  if (!cityOf(k, map)) return `${L}は都心から3タイル以内に置く必要があります`;
+
+  if (d === "harbor" || d === "water_park") {
+    if (!["coast", "lake"].includes(tile.t)) return `${L}は沿岸または湖タイルにのみ置けます`;
+    if (tile.f === "reef") return "礁の上には置けません";
+    if (!nks.some((n) => TERRAIN[tileOf(map, n).t].land)) return `${L}は陸地に隣接する水域タイルが必要です`;
+  } else if (d === "canal") {
+    if (!TERRAIN[tile.t].land) return "運河は陸地にのみ置けます";
+    if (!nks.some((n) => !TERRAIN[tileOf(map, n).t].land)) return "運河は水域に隣接している必要があります";
   } else if (!TERRAIN[tile.t].land) {
-    return `${L}は水域に置けません（水域に置けるのは港のみ）`;
+    return `${L}は水域に置けません（水域に置けるのは港・ウォーターパークのみ）`;
   }
 
   if (d === "aqueduct") {
-    if (!nks.includes("0,0")) return "用水路は都心に隣接している必要があります";
+    const cityKey = cityOf(k, map);
+    if (!nks.includes(cityKey)) return "用水路は都心に隣接している必要があります";
     const fresh = riverSides(rv, k).some(Boolean) || nks.some((n) => {
       const t = tileOf(map, n);
       return t.t === "lake" || t.t === "mountain" || t.f === "oasis";
@@ -174,11 +215,34 @@ function checkDistrict(map, rv, k, d) {
     const s = riverSides(rv, k);
     if (!s.some((v, i) => v && s[(i + 1) % 6])) return "ダムは川が連続する2辺以上に接している必要があります";
     const mine = new Set(riverIdsOf(rv, k));
-    const others2 = Object.entries(map).filter(([kk, v]) => kk !== k && v && v.d === d).map(([kk]) => kk);
-    if (others2.some((o) => riverIdsOf(rv, o).some((id) => mine.has(id)))) return "1本の川に置けるダムは1つまでです";
+    if (others.some((o) => riverIdsOf(rv, o).some((id) => mine.has(id)))) return "1本の川に置けるダムは1つまでです";
   }
-  if (ONE_PER_CITY.has(d) && others.length) return `${L}は1都市に1つまでです`;
-  if (d === "government" && others.length) return "政府複合施設は1文明に1つまでです";
+  if (d === "entertainment" && tile.t !== undefined) {
+    // no special
+  }
+
+  // 1都市1つ
+  const ck = cityOf(k, map);
+  if (ONE_PER_CITY.has(d)) {
+    const sameCity = others.filter((o) => cityOf(o, map) === ck);
+    if (sameCity.length) return `${L}は1都市に1つまでです`;
+  }
+  if (d === "government") {
+    if (others.length) return "政府複合施設は1文明に1つまでです";
+  }
+
+  // 人口スロット（専門区域のみ）
+  if (isSpecialty(d)) {
+    const pop = cityPop(map, ck);
+    const max = 1 + Math.floor((pop - 1) / 3);
+    const used = Object.entries(map).filter(([kk, v]) => {
+      if (kk === k || !v || !v.d) return false;
+      if (!isSpecialty(v.d)) return false;
+      return cityOf(kk, map) === ck;
+    }).length;
+    if (used >= max) return `人口に対して区域スロットが不足しています（${used}/${max}）`;
+  }
+
   return null;
 }
 
@@ -189,7 +253,11 @@ function validateAll(map, rv) {
     const reason = checkDistrict(map, rv, k, v.d);
     if (reason) out[k] = reason;
   });
-  if (!map["0,0"] || map["0,0"].d !== "city") out["0,0"] = "都心がありません";
+  citiesOf(map).forEach((c) => {
+    const reason = checkDistrict(map, rv, c, "city");
+    if (reason) out[c] = reason;
+  });
+  if (!citiesOf(map).length) out["0,0"] = "都心がありません";
   return out;
 }
 
@@ -218,6 +286,11 @@ function scoreAt(map, rv, k) {
     add(c((t) => t.f === "geothermal"), 2, "地熱孔");
     minor(c((t) => t.f === "rainforest"), "熱帯雨林");
   }
+  if (d === "holy_site") {
+    add(c((t) => t.t === "mountain"), 1, "山岳");
+    add(c((t) => t.f === "natural_wonder"), 2, "自然遺産");
+    minor(c((t) => t.f === "woods"), "森");
+  }
   if (d === "commercial") {
     if (riverSides(rv, k).some(Boolean)) { value += 2; reasons.push("川に接している → +2（辺の数に関係なく1回）"); }
     add(c((t) => t.d === "harbor"), 2, "港");
@@ -229,13 +302,15 @@ function scoreAt(map, rv, k) {
   if (d === "industrial") {
     add(c((t) => t.d === "aqueduct"), 2, "用水路");
     add(c((t) => t.d === "dam"), 2, "ダム");
+    add(c((t) => t.d === "canal"), 2, "運河");
     add(c((t) => t.x === "quarry"), 1, "採石場");
     add(c((t) => t.x === "strategic" || t.x === "strategic_mine"), 1, "戦略資源");
     minor(c((t) => t.x === "mine" || t.x === "strategic_mine"), "鉱山");
+    minor(c((t) => t.x === "lumber_mill"), "製材所");
   }
   if (d === "theater") {
     add(c((t) => t.d === "wonder"), 2, "遺産");
-    add(c((t) => t.d === "entertainment"), 2, "娯楽複合施設");
+    add(c((t) => t.d === "entertainment" || t.d === "water_park"), 2, "娯楽複合施設");
   }
   add(c((t) => t.d === "government"), 1, "政府複合施設");
   minor(c((t) => COUNTS_AS_DISTRICT.has(t.d)), "隣接区域（都心・用水路・ダム含む）");
@@ -289,9 +364,9 @@ const templates = [
     name: "川沿い商業ハブ三角形",
     goal: "商業ハブ・キャンパス・政府複合施設を置き、隣接ボーナス合計を最大化",
     allowed: ["commercial", "campus", "government"],
-    tiles: { "0,0": T("grass", { d: "city" }), "-1,2": T("mountain"), "0,2": T("mountain"), "2,1": T("hills", { x: "mine" }), "-2,0": T("plains", { f: "woods" }) },
+    tiles: { "0,0": T("grass", { d: "city", pop: 7 }), "-1,2": T("mountain"), "0,2": T("mountain"), "2,1": T("hills", { x: "mine" }), "-2,0": T("plains", { f: "woods" }) },
     rivers: [["1,0", "2,0"], ["1,0", "2,-1"], ["2,0", "2,-1"], ["2,0", "3,-1"]],
-    note: "商業ハブは川の辺に接するタイルで+2。政府複合施設は隣接する専門区域すべてに+1なので、複数区域の中心に置くのが基本。",
+    note: "商業ハブは川の辺に接するタイルで+2。政府複合施設は隣接する専門区域すべてに+1。",
   },
   {
     id: "iz-dam",
@@ -299,11 +374,11 @@ const templates = [
     goal: "工業地帯・用水路・ダムで工業地帯の生産力を最大化",
     allowed: ["industrial", "aqueduct", "dam"],
     tiles: {
-      "0,0": T("grass", { d: "city" }), "2,-1": T("flood"), "2,-2": T("flood"), "3,-1": T("flood"),
+      "0,0": T("grass", { d: "city", pop: 7 }), "2,-1": T("flood"), "2,-2": T("flood"), "3,-1": T("flood"),
       "0,1": T("hills", { x: "mine" }), "1,1": T("hills", { x: "mine" }), "2,0": T("plains", { x: "luxury" }),
     },
     rivers: [["2,-1", "3,-2"], ["2,-1", "2,-2"], ["2,-1", "1,-1"], ["1,-1", "1,-2"]],
-    note: "ダムは「氾濫原」かつ「川が連続2辺以上」。用水路は都心隣接＋淡水源（川・湖・オアシス・山岳）。両方に接する位置に工業地帯を置く。",
+    note: "ダムは氾濫原＋川が連続2辺以上。用水路は都心隣接＋淡水源。両方に接する位置に工業地帯を置く。",
   },
   {
     id: "campus-pass",
@@ -311,7 +386,7 @@ const templates = [
     goal: "キャンパスと政府複合施設で科学力の隣接を最大化",
     allowed: ["campus", "government"],
     tiles: {
-      "0,0": T("plains", { d: "city" }), "1,-1": T("mountain"), "1,-2": T("mountain"), "0,-2": T("mountain"),
+      "0,0": T("plains", { d: "city", pop: 7 }), "1,-1": T("mountain"), "1,-2": T("mountain"), "0,-2": T("mountain"),
       "-1,-1": T("plains", { f: "geothermal" }), "-1,1": T("grass", { x: "luxury" }), "-2,1": T("grass", { f: "rainforest" }), "-2,2": T("grass", { f: "rainforest" }),
     },
     rivers: [],
@@ -322,7 +397,7 @@ const templates = [
     name: "遺産と劇場広場",
     goal: "劇場広場・娯楽複合施設・政府複合施設で文化力を最大化",
     allowed: ["theater", "entertainment", "government"],
-    tiles: { "0,0": T("grass", { d: "city" }), "1,0": T("grass", { d: "wonder" }), "2,-2": T("plains", { d: "wonder" }), "-1,0": T("hills", { x: "mine" }) },
+    tiles: { "0,0": T("grass", { d: "city", pop: 7 }), "1,0": T("grass", { d: "wonder" }), "2,-2": T("plains", { d: "wonder" }), "-1,0": T("hills", { x: "mine" }) },
     rivers: [],
     note: "劇場広場は遺産1つにつき+2、娯楽複合施設にも+2。遺産は区域ではないので「隣接区域」には数えない。",
   },
@@ -332,13 +407,27 @@ const templates = [
     goal: "港と商業ハブの隣接ボーナス合計を最大化",
     allowed: ["harbor", "commercial"],
     tiles: {
-      "0,0": T("grass", { d: "city" }),
+      "0,0": T("grass", { d: "city", pop: 7 }),
       "-1,0": T("coast"), "-1,1": T("coast"), "-2,1": T("coast", { x: "sea" }), "-2,2": T("coast", { x: "sea" }),
       "-1,2": T("coast"), "-2,0": T("coast", { f: "reef" }), "-3,1": T("coast"), "-3,2": T("coast"), "-3,3": T("coast"), "-2,3": T("coast"),
       "-1,-1": T("coast", { x: "sea" }), "-2,-1": T("coast"), "-3,0": T("coast"),
     },
     rivers: [["0,1", "1,1"], ["0,1", "1,0"]],
     note: "港は都心隣接で+2、海洋資源1つにつき+1。商業ハブは隣接する港で+2、川で+2。礁の上には港を置けない。",
+  },
+  {
+    id: "twin-cities",
+    name: "双子都市",
+    goal: "2都市でキャンパス・聖地・劇場広場を配置し合計を最大化",
+    allowed: ["campus", "holy_site", "theater", "government"],
+    tiles: {
+      "0,0": T("grass", { d: "city", pop: 7 }),
+      "-3,0": T("grass", { d: "city", pop: 7 }),
+      "1,-1": T("mountain"), "-2,1": T("mountain"), "-4,1": T("mountain"),
+      "-1,-1": T("plains", { f: "geothermal" }), "-4,-1": T("grass", { f: "natural_wonder" }),
+    },
+    rivers: [],
+    note: "2都市それぞれ人口7（区域3枠）。聖地は自然遺産隣接で+2、森隣接で+0.5。都市間は4タイル以上離す。",
   },
 ];
 const buildMap = (t) => JSON.parse(JSON.stringify(t.tiles));
@@ -347,7 +436,7 @@ const riverList = (t) => t.rivers.map(([a, b]) => ekey(a, b));
 /* =========================================================
    描画
    ========================================================= */
-function HexTile({ k, q, r, tile, selected, invalid, ghost, onClick }) {
+function HexTile({ k: _k, q, r, tile, selected, invalid, ghost, onClick }) {
   const { x, y } = center(q, r);
   const base = TERRAIN[tile.t];
   const dist = tile.d ? DISTRICTS[tile.d] : null;
@@ -394,21 +483,21 @@ const TOOL_TABS = [
   { id: "x", label: "資源・改善" },
   { id: "river", label: "川" },
 ];
-const PLACEABLE = ["campus", "commercial", "harbor", "industrial", "theater", "government", "aqueduct", "dam", "entertainment", "wonder"];
-const OPTIMIZABLE = PLACEABLE.filter((d) => d !== "wonder");
+const PLACEABLE = ["city", "campus", "holy_site", "commercial", "harbor", "industrial", "theater", "government", "aqueduct", "dam", "entertainment", "water_park", "canal", "wonder"];
+const OPTIMIZABLE = PLACEABLE.filter((d) => d !== "wonder" && d !== "city");
 
 export default function App() {
   const [mode, setMode] = useState("sandbox");
-  const [template, setTemplate] = useState(templates[1]);
-  const [map, setMap] = useState(() => buildMap(templates[1]));
-  const [rivers, setRivers] = useState(() => riverList(templates[1]));
+  const [template, setTemplate] = useState(templates[0]);
+  const [map, setMap] = useState(() => buildMap(templates[0]));
+  const [rivers, setRivers] = useState(() => riverList(templates[0]));
   const [answer, setAnswer] = useState({});
   const [selected, setSelected] = useState(null);
   const [tab, setTab] = useState("d");
-  const [brush, setBrush] = useState("industrial");
+  const [brush, setBrush] = useState("campus");
   const [msg, setMsg] = useState(null);
   const [checked, setChecked] = useState(false);
-  const [optPick, setOptPick] = useState(["industrial", "aqueduct", "dam"]);
+  const [optPick, setOptPick] = useState(["campus", "holy_site", "theater"]);
   const [ghost, setGhost] = useState(null);
   const [hoverEdge, setHoverEdge] = useState(null);
 
@@ -441,8 +530,10 @@ export default function App() {
     const tile = tileOf(activeMap, k);
 
     if (puzzle) {
-      if (puzzleBase[k] && puzzleBase[k].d) return setMsg("この区域・遺産は問題の固定配置です");
+      if (puzzleBase[k] && puzzleBase[k].d === "city") return setMsg("この都心は問題の固定配置です");
+      if (puzzleBase[k] && puzzleBase[k].d && puzzleBase[k].d !== "city") return setMsg("この区域・遺産は問題の固定配置です");
       if (brush === "erase") return setAnswer((a) => { const n = { ...a }; delete n[k]; return n; });
+      if (brush === "city") return setMsg("問題モードでは都心は固定です");
       if (!template.allowed.includes(brush)) return setMsg("この問題では使えない区域です");
       const without = { ...answer };
       delete without[k];
@@ -454,18 +545,22 @@ export default function App() {
       return setAnswer({ ...without, [k]: brush });
     }
 
-    if (k === "0,0" && tab !== "t") return setMsg("都心タイルは地形のみ変更できます");
     if (tab === "d") {
-      if (brush === "erase") return setMap((m) => ({ ...m, [k]: { ...tile, d: null } }));
+      if (brush === "erase") {
+        if (tile.d === "city") return setMsg("都心は消せません（白紙リセットを使用）");
+        return setMap((m) => ({ ...m, [k]: { ...tile, d: null } }));
+      }
       const base = { ...activeMap, [k]: { ...tile, d: null } };
       const reason = checkDistrict(base, rv, k, brush);
       if (reason) return setMsg(`置けません：${reason}`);
       if (REMOVABLE_EXTRAS.has(tile.x) || REMOVABLE_FEATURES.has(tile.f)) setMsg("区域の設置により、このタイルの改善・地物は撤去されました");
-      return setMap(withDistrict(base, k, brush));
+      const placed = withDistrict(base, k, brush);
+      if (brush === "city") placed[k] = { ...placed[k], pop: tile.pop || 7 };
+      return setMap(placed);
     }
     if (tab === "t") {
-      if (k === "0,0" && !TERRAIN[brush].land) return setMsg("都心は陸地である必要があります");
-      if (k === "0,0" && brush === "mountain") return setMsg("山岳に都心は建設できません");
+      if (tile.d === "city" && !TERRAIN[brush].land) return setMsg("都心は陸地である必要があります");
+      if (tile.d === "city" && brush === "mountain") return setMsg("山岳に都心は建設できません");
       const land = TERRAIN[brush].land;
       const next = { ...tile, t: brush };
       if (brush === "mountain") { next.f = null; next.x = null; if (next.d !== "city") next.d = null; }
@@ -475,6 +570,7 @@ export default function App() {
       if (!land && next.x && next.x !== "sea") next.x = null;
       if (next.f === "oasis" && brush !== "desert") next.f = null;
       if (next.x === "mine" && brush !== "hills") next.x = null;
+      if (next.x === "lumber_mill" && brush !== "woods") next.x = null; // 製材所は森前提（簡略）
       if (brush === "flood" && !riverSides(rv, k).some(Boolean)) setMsg("注意：氾濫原は通常、川に接するタイルに生成されます");
       return setMap((m) => ({ ...m, [k]: next }));
     }
@@ -483,9 +579,10 @@ export default function App() {
       const land = TERRAIN[tile.t].land;
       if (tile.t === "mountain") return setMsg("山岳には地物を置けません");
       if (brush === "reef" && land) return setMsg("礁は沿岸タイル専用です");
-      if (brush !== "reef" && !land) return setMsg(`${FEATURES[brush].label}は陸地専用です`);
+      if (brush !== "reef" && brush !== "natural_wonder" && !land) return setMsg(`${FEATURES[brush].label}は陸地専用です`);
       if (brush === "oasis" && tile.t !== "desert") return setMsg("オアシスは砂漠タイル専用です");
-      if (tile.d && brush === "geothermal") return setMsg("区域のあるタイルに地熱孔は置けません");
+      if (tile.d && tile.d !== "city" && brush === "geothermal") return setMsg("区域のあるタイルに地熱孔は置けません");
+      if (tile.d && tile.d !== "city" && brush === "natural_wonder") return setMsg("区域のあるタイルに自然遺産は置けません");
       return setMap((m) => ({ ...m, [k]: { ...tile, f: brush } }));
     }
     if (tab === "x") {
@@ -531,7 +628,7 @@ export default function App() {
   function runOptimize() {
     if (!optPick.length) return setMsg("探索する区域を選んでください");
     const sol = optimize(map, rv, optPick);
-    if (!sol) { setGhost(null); return setMsg("条件を満たす配置がありません（設置制限・1都市1つ制限を確認）"); }
+    if (!sol) { setGhost(null); return setMsg("条件を満たす配置がありません（設置制限・人口スロット・1都市1つ制限を確認）"); }
     setGhost(sol);
     setMsg(`探索完了：盤面全体の隣接合計 +${sol.total}（点線が提案位置）`);
   }
@@ -548,6 +645,14 @@ export default function App() {
   const placedAll = puzzle && template.allowed.every((d) => Object.values(answer).includes(d));
   const solved = puzzle && best && placedAll && Object.keys(invalid).length === 0 && total >= best.total;
 
+  const selCity = sel && sel.d === "city" ? selected : null;
+  const selPop = selCity ? (tileOf(activeMap, selected).pop || 7) : null;
+
+  function setCityPop(k, pop) {
+    const clamped = Math.max(1, Math.min(20, pop));
+    setMap((m) => ({ ...m, [k]: { ...tileOf(m, k), pop: clamped } }));
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-5">
@@ -555,7 +660,7 @@ export default function App() {
           <div>
             <div className="text-cyan-300 text-sm font-bold tracking-widest">GATHERING STORM / 標準ルール学習用</div>
             <h1 className="text-3xl md:text-5xl font-black mt-1">Civ6 区域パズル・ラボ</h1>
-            <p className="text-slate-400 mt-2">川はヘクスの「辺」、設置条件は区域ごとに判定。置けない場所は理由を表示します。</p>
+            <p className="text-slate-400 mt-2">川はヘクスの「辺」、設置条件は区域ごとに判定。置けない場所は理由を表示します。2都市まで対応。</p>
           </div>
           <div className="flex gap-2">
             <Button onClick={() => { setMode("sandbox"); setMsg(null); }} className={mode === "sandbox" ? "bg-cyan-500 text-slate-950" : "bg-slate-800"}>自由配置</Button>
@@ -586,7 +691,7 @@ export default function App() {
                   ))}
                 </div>
               )}
-              <Button className="w-full bg-slate-700" onClick={() => { setChecked(false); setGhost(null); setMsg(null); if (puzzle) setAnswer({}); else { setMap({ "0,0": { t: "grass", d: "city" } }); setRivers([]); } }}>
+              <Button className="w-full bg-slate-700" onClick={() => { setChecked(false); setGhost(null); setMsg(null); if (puzzle) setAnswer({}); else { setMap({ "0,0": { t: "grass", d: "city", pop: 7 } }); setRivers([]); } }}>
                 <RotateCcw className="w-4 h-4 mr-2" />{puzzle ? "解答をリセット" : "盤面を白紙に"}
               </Button>
 
@@ -645,7 +750,7 @@ export default function App() {
                 ))}
               </svg>
               <div className="p-3 text-xs text-slate-400">
-                青い太線＝川（ヘクスの辺）。赤い点線枠＝設置条件違反。下部の黒ラベル＝基本隣接ボーナス。上部の小文字＝地物・資源（森/雨/湿/オ/熱/礁、鉱/石/戦/高/魚）。
+                青い太線＝川（ヘクスの辺）。赤い点線枠＝設置条件違反。下部の黒ラベル＝基本隣接ボーナス。上部の小文字＝地物・資源。
               </div>
             </CardContent>
           </Card>
@@ -661,6 +766,19 @@ export default function App() {
                       <div>地形：{TERRAIN[sel.t].label}{sel.f ? ` ／ ${FEATURES[sel.f].label}` : ""}{sel.x ? ` ／ ${EXTRAS[sel.x].label}` : ""}</div>
                       <div>川に接する辺：{riverSides(rv, selected).filter(Boolean).length} 辺</div>
                       <div>区域：{sel.d ? DISTRICTS[sel.d].label : "なし"}</div>
+                      {sel.d === "city" && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <Users className="w-4 h-4 text-cyan-300" />
+                          <span>人口</span>
+                          <button className="px-2 py-0.5 rounded bg-slate-700" onClick={() => setCityPop(selected, (selPop || 7) - 1)} disabled={puzzle}>-</button>
+                          <span className="font-bold">{selPop}</span>
+                          <button className="px-2 py-0.5 rounded bg-slate-700" onClick={() => setCityPop(selected, (selPop || 7) + 1)} disabled={puzzle}>+</button>
+                          <span className="text-xs text-slate-400">（区域枠 {1 + Math.floor(((selPop || 7) - 1) / 3)}）</span>
+                        </div>
+                      )}
+                      {sel.d && sel.d !== "city" && (
+                        <div className="text-xs text-slate-400 mt-1">所属都心：{cityOf(selected, activeMap) || "なし"}（距離 {cityOf(selected, activeMap) ? hexDist(selected, cityOf(selected, activeMap)) : "-"})</div>
+                      )}
                     </div>
                     {invalid[selected] && <div className="mt-3 rounded-lg bg-rose-950 text-rose-300 p-2 text-sm">設置条件違反：{invalid[selected]}</div>}
                     {selScore && (
@@ -714,12 +832,12 @@ export default function App() {
 
         <section>
           <div className="flex items-center gap-2 mb-3"><Lightbulb className="text-amber-300" /><h2 className="text-2xl font-black">定石テンプレート</h2></div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
             {templates.map((t) => (
               <Card key={t.id} className="bg-slate-900 border-slate-700 text-slate-100">
                 <CardContent className="pt-5">
                   <div className="font-black text-lg">{t.name}</div>
-                  <p className="text-sm text-slate-400 mt-2 min-h-24">{t.note}</p>
+                  <p className="text-sm text-slate-400 mt-2 min-h-20">{t.note}</p>
                   <div className="flex gap-2 mt-4">
                     <Button size="sm" onClick={() => loadTemplate(t, false)} className="bg-cyan-600">最適配置を見る</Button>
                     <Button size="sm" onClick={() => loadTemplate(t, true)} className="bg-slate-700">問題<ChevronRight className="w-4 h-4" /></Button>
@@ -734,15 +852,15 @@ export default function App() {
           <CardContent className="pt-6 grid md:grid-cols-3 gap-5 text-sm">
             <div>
               <b className="text-cyan-300">実装した設置制限</b>
-              <p className="text-slate-400 mt-1">山岳・地熱孔・高級/戦略資源には不可。港は陸地に隣接する沿岸/湖（礁は不可）。用水路は都心隣接＋川/湖/オアシス/山岳に隣接。ダムは氾濫原＋川が連続2辺以上、1本の川に1つ。専門区域・用水路・娯楽は1都市1つ、政府複合施設は1文明1つ。</p>
+              <p className="text-slate-400 mt-1">山岳・自然遺産・高級/戦略資源には不可（都心は例外で陸地のみ）。港/ウォーターパークは陸地隣接の沿岸/湖。用水路は都心隣接＋川/湖/オアシス/山岳。ダムは氾濫原＋川が連続2辺以上、1本の川に1つ。運河は水域隣接の陸地。都心同士は4タイル以上。区域は都心から3タイル以内。専門区域は人口スロット制（1+floor((pop-1)/3)）。専門区域・用水路・娯楽・ウォーターパークは1都市1つ、政府複合施設は1文明1つ。</p>
             </div>
             <div>
               <b className="text-amber-300">未反映・簡略化</b>
-              <p className="text-slate-400 mt-1">盤面外周の辺の川、運河、地区、野営地、宇宙基地、遺産ごとの固有設置条件、自然遺産、文明・指導者固有能力、政策カード・建造物による倍加。「同じ川」は辺のつながりで判定（実ゲームは川の名前で判定）。最終確認はゲーム内プレビューで。</p>
+              <p className="text-slate-400 mt-1">盤面外周の辺の川、運河の水域接続厳密判定、地区（Encampment/Spaceport/Aerodrome/Preserve）、野営地、宇宙基地、遺産ごとの固有設置条件、自然遺産の固有効果、文明・指導者固有能力、政策カード・建造物による倍加、都市国ボーナス、人口自動成長。「同じ川」は辺のつながりで判定。最終確認はゲーム内プレビューで。</p>
             </div>
             <div>
               <b className="text-emerald-300">根拠</b>
-              <p className="text-slate-400 mt-1">隣接値：Civilopedia（Gathering Storm）各区域ページ、Civilization 6 Planner 隣接表。ダム・用水路の設置条件：Civilopedia／Civilization Wiki。地熱孔上の区域不可：Civilization Wiki。</p>
+              <p className="text-slate-400 mt-1">隣接値：Civilopedia（Gathering Storm）各区域ページ、Civ6 Planner 隣接表、civ6lib SKILL.md。ダム・用水路・人口スロット・距離制限：Civilopedia／Civ Wiki／civ6lib。</p>
             </div>
           </CardContent>
         </Card>
