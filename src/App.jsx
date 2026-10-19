@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SolverWorker from "./solver.worker.js?worker";
 
 
-import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, key, coords, center, hexPoints, hexDist, EDGES, buildRivers, riverSides, citiesOf, cityOf, tileOf, withDistrict, checkDistrict, validateAll, allScores, optimize, templates, buildMap, riverList, WONDERS } from "./rules.js";
+import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, key, coords, center, hexPoints, hexDist, EDGES, buildRivers, riverSides, citiesOf, cityOf, cityPop, tileOf, withDistrict, checkDistrict, validateAll, allScores, totalOf, optimize, templates, buildMap, riverList, WONDERS } from "./rules.js";
 
 
 /* =========================================================
