@@ -91,6 +91,10 @@ export default function App() {
   const [solving, setSolving] = useState(false);
   const [ghost, setGhost] = useState(null);
   const [hoverEdge, setHoverEdge] = useState(null);
+  const [saveName, setSaveName] = useState("");
+  const [saves, setSaves] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("civ6saves") || "{}"); } catch { return {}; }
+  });
 
   const puzzle = mode === "puzzle";
   const puzzleBase = useMemo(() => buildMap(template), [template]);
@@ -275,6 +279,58 @@ export default function App() {
     setGhost(null);
     setMap((m) => ({ ...m, [k]: { ...tileOf(m, k), pop: clamped } }));
   }
+  const cityName = (k) => tileOf(activeMap, k).name || `都市${citiesOf(activeMap).indexOf(k) + 1}`;
+  function setCityName(k, name) {
+    setMap((m) => ({ ...m, [k]: { ...tileOf(m, k), name: name.slice(0, 20) } }));
+  }
+
+  const SAVE_KEY = "civ6saves";
+  function persistSaves(next) {
+    setSaves(next);
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(next)); } catch { /* quota */ }
+  }
+  function saveBoard() {
+    const name = saveName.trim() || `保存 ${new Date().toLocaleString("ja-JP")}`;
+    const next = { ...saves, [name]: { map, rivers, at: Date.now() } };
+    persistSaves(next);
+    setSaveName("");
+    setMsg(`保存しました：${name}`);
+  }
+  function loadBoard(name) {
+    const sv = saves[name];
+    if (!sv) return setMsg("保存データがありません");
+    setMap(JSON.parse(JSON.stringify(sv.map)));
+    setRivers([...sv.rivers]);
+    setGhost(null); setSelected(null); setChecked(false);
+    setMsg(`読み込みました：${name}`);
+  }
+  function deleteBoard(name) {
+    const next = { ...saves };
+    delete next[name];
+    persistSaves(next);
+    setMsg(`削除しました：${name}`);
+  }
+  function exportBoard() {
+    const blob = new Blob([JSON.stringify({ map, rivers }, null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "civ6-board.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function importBoard(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data.map || !Array.isArray(data.rivers)) throw new Error("bad format");
+        setMap(data.map); setRivers(data.rivers);
+        setGhost(null); setSelected(null);
+        setMsg("インポートしました");
+      } catch { setMsg("インポートに失敗しました（形式不正）"); }
+    };
+    reader.readAsText(file);
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8">
@@ -337,6 +393,30 @@ export default function App() {
               <Button className="w-full bg-slate-700" onClick={() => { setChecked(false); setGhost(null); setMsg(null); if (puzzle) setAnswer({}); else { setMap({ "0,0": { t: "grass", d: "city", pop: 7 } }); setRivers([]); } }}>
                 <RotateCcw className="w-4 h-4 mr-2" />{puzzle ? "解答をリセット" : "盤面を白紙に"}
               </Button>
+
+              {!puzzle && (
+                <div className="border-t border-slate-700 pt-3 space-y-2">
+                  <div className="font-bold text-sm">盤面の保存・読込</div>
+                  <div className="flex gap-2">
+                    <input className="bg-slate-800 rounded px-2 py-1 text-sm flex-1 min-w-0" placeholder="保存名" value={saveName} onChange={(e) => setSaveName(e.target.value)} />
+                    <Button size="sm" className="bg-cyan-600" onClick={saveBoard}>保存</Button>
+                  </div>
+                  {Object.keys(saves).length > 0 && (
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {Object.keys(saves).map((name) => (
+                        <div key={name} className="flex items-center gap-1 text-xs">
+                          <button className="flex-1 text-left truncate px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" onClick={() => loadBoard(name)} title={name}>{name}</button>
+                          <button className="px-2 py-1 rounded bg-slate-800 hover:bg-rose-800" onClick={() => deleteBoard(name)}>削</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button size="sm" className="bg-slate-700 flex-1" onClick={exportBoard}>JSON出力</Button>
+                    <label className="flex-1 text-center px-2 py-1 text-xs rounded-lg font-bold bg-slate-700 cursor-pointer">JSON入力<input type="file" accept=".json" className="hidden" onChange={(e) => { if (e.target.files[0]) importBoard(e.target.files[0]); e.target.value = ""; }} /></label>
+                  </div>
+                </div>
+              )}
 
               {!puzzle && (
                 <div className="border-t border-slate-700 pt-3">
@@ -425,6 +505,12 @@ export default function App() {
                       <div>区域：{sel.d ? (dInfo(sel.d) || {}).label : "なし"}</div>
                       {sel.d === "city" && (
                         <div className="flex items-center gap-2 mt-2">
+                          <span>都市名</span>
+                          <input className="bg-slate-800 rounded px-2 py-0.5 text-sm w-28" value={tileOf(activeMap, selected).name || ""} placeholder={cityName(selected)} disabled={puzzle} onChange={(e) => setCityName(selected, e.target.value)} />
+                        </div>
+                      )}
+                      {sel.d === "city" && (
+                        <div className="flex items-center gap-2 mt-2">
                           <Users className="w-4 h-4 text-cyan-300" />
                           <span>人口</span>
                           <button className="px-2 py-0.5 rounded bg-slate-700" onClick={() => setCityPop(selected, (selPop || 7) - 1)} disabled={puzzle}>-</button>
@@ -434,7 +520,7 @@ export default function App() {
                         </div>
                       )}
                       {sel.d && sel.d !== "city" && (
-                        <div className="text-xs text-slate-400 mt-1">所属都心：{cityOf(selected, activeMap) || "なし"}（距離 {cityOf(selected, activeMap) ? hexDist(selected, cityOf(selected, activeMap)) : "-"})</div>
+                        <div className="text-xs text-slate-400 mt-1">所属：{cityOf(selected, activeMap) ? `${cityName(cityOf(selected, activeMap))}（距離 ${hexDist(selected, cityOf(selected, activeMap))}）` : "なし"}</div>
                       )}
                     </div>
                     {invalid[selected] && <div className="mt-3 rounded-lg bg-rose-950 text-rose-300 p-2 text-sm">設置条件違反：{invalid[selected]}</div>}
@@ -459,11 +545,11 @@ export default function App() {
               <CardContent>
                 {citiesOf(activeMap).length ? (
                   <ul className="text-sm space-y-1">
-                    {citiesOf(activeMap).map((c, i) => {
+                    {citiesOf(activeMap).map((c) => {
                       const pop = cityPop(activeMap, c);
                       const max = 1 + Math.floor((pop - 1) / 3);
                       const used = Object.keys(activeMap).filter((kk) => activeMap[kk] && activeMap[kk].d && isSpecialty(activeMap[kk].d) && cityOf(kk, activeMap) === c).length;
-                      return <li key={c}>都市{i + 1} ({c}) 人口 {pop} ／ 区域枠 {used}/{max}</li>;
+                      return <li key={c}>{cityName(c)} ({c}) 人口 {pop} ／ 区域枠 {used}/{max}</li>;
                     })}
                   </ul>
                 ) : <p className="text-slate-400 text-sm">都心がありません</p>}
