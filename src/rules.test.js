@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  DISTRICTS, WONDERS, COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV,
+  COUNTS_AS_DISTRICT, ONE_PER_CITY, ONE_PER_CIV,
   isSpecialty, buildRivers, checkDistrict, checkExtra, validateAll, scoreAt, optimize,
   templates, hexDist, ekey,
 } from "./rules.js";
