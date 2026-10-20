@@ -30,6 +30,8 @@ const EXTRAS = {
   luxury: { label: "高級資源", short: "高" },
   sea: { label: "海洋資源", short: "魚" },
   lumber_mill: { label: "製材所", short: "材" },
+  stone: { label: "石材", short: "石材" },
+  camp: { label: "野営地", short: "営" },
 };
 const DISTRICTS = {
   city: { label: "都心", short: "都", color: "#fde68a" },
@@ -55,15 +57,15 @@ const DISTRICTS = {
 };
 // 遺産（固有設置条件つき）。d フィールドに wonder:<id> として格納
 const WONDERS = {
-  pyramids: { label: "ピラミッド", short: "金", terrain: ["desert", "flood"], req: "砂漠または氾濫原" },
-  petra: { label: "ペトラ", short: "ペ", terrain: ["desert", "flood"], req: "砂漠または氾濫原" },
+  pyramids: { label: "ピラミッド", short: "金", terrain: ["desert", "flood"], noHills: true, req: "丘陵でない砂漠または氾濫原" },
+  petra: { label: "ペトラ", short: "ペ", terrain: ["desert", "flood"], noHills: true, req: "丘陵でない砂漠または氾濫原" },
   hanging_gardens: { label: "空中庭園", short: "空", river: true, req: "川に接する" },
   oracle: { label: "神託", short: "託", hills: true, req: "丘陵" },
-  stonehenge: { label: "ストーンヘンジ", short: "石遺", flat: true, adjExtra: ["quarry"], req: "平地・採石場に隣接" },
+  stonehenge: { label: "ストーンヘンジ", short: "石遺", flat: true, adjExtra: ["stone"], req: "平地・石材に隣接" },
   great_library: { label: "大図書館", short: "図", flat: true, adjDistrict: ["campus"], req: "平地・キャンパスに隣接" },
   colosseum: { label: "コロッセオ", short: "闘", flat: true, adjDistrict: ["entertainment"], req: "平地・娯楽複合施設に隣接" },
   statue_zeus: { label: "ゼウス像", short: "宙", flat: true, adjDistrict: ["encampment"], req: "平地・軍事基地に隣接" },
-  temple_artemis: { label: "アルテミス神殿", short: "狩", req: "（簡略：制限なし）" },
+  temple_artemis: { label: "アルテミス神殿", short: "狩", adjExtra: ["camp"], req: "野営地に隣接" },
   terracotta: { label: "兵馬俑", short: "兵", terrain: ["grass", "plains"], adjDistrict: ["encampment"], req: "草原/平原・軍事基地に隣接" },
   mausoleum: { label: "ハリカルナッソス霊廟", short: "霊", adjDistrict: ["harbor"], req: "港に隣接" },
   great_lighthouse: { label: "大灯台", short: "灯", water: "coast", adjDistrict: ["harbor"], req: "沿岸（陸隣接）・港に隣接" },
@@ -98,7 +100,7 @@ const WONDERS = {
 };
 const SCORED = new Set(["campus", "holy_site", "commercial", "harbor", "industrial", "theater"]);
 const COUNTS_AS_DISTRICT = new Set(["city", "campus", "holy_site", "commercial", "harbor", "industrial", "theater", "government", "aqueduct", "dam", "entertainment", "water_park", "canal", "encampment", "aerodrome", "spaceport", "neighborhood", "preserve", "diplomatic"]);
-const ONE_PER_CITY = new Set(["campus", "holy_site", "commercial", "harbor", "industrial", "theater", "entertainment", "water_park", "encampment", "aerodrome", "preserve"]);
+const ONE_PER_CITY = new Set(["campus", "holy_site", "commercial", "harbor", "industrial", "theater", "entertainment", "water_park", "encampment", "aerodrome", "preserve", "aqueduct"]);
 const ONE_PER_CIV = new Set(["government", "diplomatic"]);
 const REMOVABLE_EXTRAS = new Set(["mine", "quarry", "sea", "lumber_mill"]);
 const REMOVABLE_FEATURES = new Set(["woods", "rainforest", "marsh"]);
@@ -207,13 +209,16 @@ const tileOf = (map, k) => ({ ...BLANK, ...(map[k] || {}) });
 function withDistrict(map, k, d) {
   const t = tileOf(map, k);
   const isCity = d === "city";
+  // 都心は撤去可能な地物・改善を消し、地熱孔・高級/戦略資源は残す
+  const keepExtra = isCity && ["luxury", "strategic", "strategic_mine"].includes(t.x);
+  const keepFeature = isCity && t.f === "geothermal";
   return {
     ...map,
     [k]: {
       ...t,
       d,
-      x: isCity ? t.x : (REMOVABLE_EXTRAS.has(t.x) ? null : t.x),
-      f: isCity ? t.f : (REMOVABLE_FEATURES.has(t.f) ? null : t.f),
+      x: keepExtra || !REMOVABLE_EXTRAS.has(t.x) ? t.x : null,
+      f: keepFeature || !REMOVABLE_FEATURES.has(t.f) ? t.f : null,
       pop: isCity ? (t.pop || 7) : t.pop,
     },
   };
@@ -238,6 +243,7 @@ function checkWonder(map, rv, k, wk, nks) {
   if (!w.terrain && w.feature && !w.feature.includes(tile.f)) return `${w.label}は${w.req}に建設する必要があります`;
   if (w.flat && !isFlatLand(tile)) return `${w.label}は${w.req}に建設する必要があります`;
   if (w.hills && !tile.h) return `${w.label}は${w.req}に建設する必要があります`;
+  if (w.noHills && tile.h) return `${w.label}は${w.req}に建設する必要があります`;
   if (w.water) {
     if (tile.t !== w.water) return `${w.label}は${w.req}に建設する必要があります`;
     if (!nks.some((n) => TERRAIN[tileOf(map, n).t].land)) return `${w.label}は陸地に隣接する水域タイルが必要です`;
@@ -260,6 +266,8 @@ function checkDistrict(map, rv, k, d) {
 
   // 都心の設置
   if (d === "city") {
+    if (tile.d) return "既に区域・都心・遺産があります";
+    if (tile.f === "oasis") return "オアシスの上に都心は建設できません";
     if (!TERRAIN[tile.t].land) return "都心は陸地にのみ建設できます";
     if (tile.t === "mountain") return "山岳に都心は建設できません";
     if (tile.t === "blocked") return "使用不可タイルに都心は建設できません";
@@ -276,8 +284,10 @@ function checkDistrict(map, rv, k, d) {
   if (tile.t === "mountain" && wk !== "machu_picchu") return "山岳には区域・遺産を置けません";
   if (wk === "machu_picchu" && tile.t !== "mountain") return "マチュピチュは山岳タイルに建設する必要があります";
   if (tile.t === "blocked") return "使用不可タイルには区域・遺産を置けません";
+  if (tile.f === "oasis") return "オアシスの上には区域・遺産を置けません";
   if (tile.f === "geothermal") return "地熱孔の上には区域・遺産を置けません";
   if (tile.f === "natural_wonder") return "自然遺産の上には区域・遺産を置けません";
+  if (tile.t === "flood" && !wk && d !== "dam") return "氾濫原には区域を置けません（ダムを除く）";
   if (w && w.feature && tile.f && !w.feature.includes(tile.f)) return `${w.label}は${w.req}に建設する必要があります`;
   if (!w && tile.f && ["woods", "rainforest", "marsh"].indexOf(tile.f) < 0 && !["oasis", "reef"].includes(tile.f)) { /* pass */ }
   if (["luxury", "strategic", "strategic_mine"].includes(tile.x)) return "高級資源・戦略資源の上には区域を置けません";
@@ -294,6 +304,7 @@ function checkDistrict(map, rv, k, d) {
     // 水域遺産：checkWonder 側で検証
   } else if (d === "canal") {
     if (!TERRAIN[tile.t].land) return "運河は陸地にのみ置けます";
+    if (!isFlatLand(tile)) return "運河は平地にのみ置けます";
     const waterN = nks.filter((n) => !TERRAIN[tileOf(map, n).t].land && tileOf(map, n).t !== "blocked");
     if (waterN.length < 1) return "運河は水域に隣接している必要があります";
     const cityKey = cityOf(k, map);
@@ -340,8 +351,14 @@ function checkDistrict(map, rv, k, d) {
     const mine = new Set(riverIdsOf(rv, k));
     if (others.some((o) => riverIdsOf(rv, o).some((id) => mine.has(id)))) return "1本の川に置けるダムは1つまでです";
   }
-  // 1都市1つ
+  // 娯楽複合施設とウォーターパークは同一都市で併存不可
   const ck = cityOf(k, map);
+  if (d === "entertainment" || d === "water_park") {
+    const other = d === "entertainment" ? "water_park" : "entertainment";
+    const conflict = Object.entries(map).some(([kk, v]) => kk !== k && v && v.d === other && cityOf(kk, map) === ck);
+    if (conflict) return `${L}は${DISTRICTS[other].label}と同じ都市に置けません`;
+  }
+  // 1都市1つ
   if (ONE_PER_CITY.has(d)) {
     const sameCity = others.filter((o) => cityOf(o, map) === ck);
     if (sameCity.length) return `${L}は1都市に1つまでです`;
@@ -372,6 +389,9 @@ function checkExtra(map, rv, k, x) {
   if (tile.d && tile.d !== "city") return "区域のあるタイルに資源・改善は置けません";
   if (tile.x && tile.x !== x) return "既存の資源・改善があります";
   if (tile.t === "mountain" || tile.t === "blocked") return "山岳・使用不可タイルには資源・改善を置けません";
+  if (tile.f === "oasis") return "オアシスの上には資源・改善を置けません";
+  if (x === "stone" && (tile.t === "flood" || tile.f === "woods" || tile.f === "rainforest" || tile.f === "marsh")) return "石材は氾濫原・森・熱帯雨林・湿原に置けません";
+  if (x === "camp" && !(tile.h || ["grass", "plains", "tundra"].includes(tile.t))) return "野営地は丘陵・草原・平原・ツンドラにのみ置けます";
   if (x === "sea" && !["coast", "lake"].includes(tile.t)) return "海洋資源は水域専用です";
   if (x !== "sea" && !TERRAIN[tile.t].land) return "陸地専用です";
   if (x === "mine" && !tile.h) return "鉱山は丘陵にのみ建設できます";
@@ -397,6 +417,10 @@ function validateAll(map, rv) {
     const self = { ...map, [k]: { ...v, d: null } };
     const reason = checkDistrict(self, rv, k, v.d);
     if (reason) out[k] = reason;
+    if (v.x) {
+      const xerr = checkExtra(self, rv, k, v.x);
+      if (xerr) out[k] = out[k] || xerr;
+    }
   });
   if (!citiesOf(map).length) out["__nocity"] = "都心がありません";
   return out;
@@ -476,13 +500,18 @@ const totalOf = (scores) => Object.values(scores).reduce((a, s) => a + s.value, 
 // 品目ごとの静的候補フィルタ（optimize の分岐削減用）
 function candidatesFor(baseMap, k, item) {
   const t = tileOf(baseMap, k);
-  if (t.t === "mountain" || t.t === "blocked") return false;
+  const isWonder = typeof item === "string" && item.startsWith("wonder:");
+  const isMachu = item === "wonder:machu_picchu";
+  if (t.t === "mountain" && !isMachu) return false;
+  if (t.t === "blocked") return false;
+  if (t.f === "oasis") return false;
+  if (t.t === "flood" && !isWonder && item !== "dam") return false;
   if (t.f === "geothermal" || t.f === "natural_wonder") return false;
   if (["luxury", "strategic", "strategic_mine"].includes(t.x) && isDistrictItem(item)) return false;
   if (isDistrictItem(item)) {
     if ((item === "harbor" || item === "water_park") && !["coast", "lake"].includes(t.t)) return false;
     if (item === "dam" && t.t !== "flood") return false;
-    if (item === "canal" && !TERRAIN[t.t].land) return false;
+    if (item === "canal" && (!TERRAIN[t.t].land || !isFlatLand(t))) return false;
     if ((item === "aerodrome" || item === "spaceport") && !isFlatLand(t)) return false;
     if (item !== "harbor" && item !== "water_park" && !TERRAIN[t.t].land && !(typeof item === "string" && item.startsWith("wonder:") && WONDERS[item.slice(7)] && WONDERS[item.slice(7)].water)) return false;
   } else {
@@ -543,7 +572,7 @@ function optimize(baseMap, rv, list, budget = { nodes: 800000, ms: 12000 }) {
     // branch-and-bound: optimistic upper bound per remaining item (+8 each)
     if (best) {
       const remain = ordered.length - i;
-      if (scoreState(map) + remain * 8 <= best.total) return;
+      if (scoreState(map) + remain * 20 <= best.total) return;
     }
     const item = ordered[i];
     for (const k of candFor(item)) {
@@ -714,13 +743,13 @@ const templates = [
     allowed: ["industrial", "aqueduct", "dam", "canal"],
     tiles: {
       "0,0": T("grass", { d: "city", pop: 10 }),
-      "1,0": T("flood"), "2,-1": T("flood"), "2,0": T("flood"),
-      "1,1": T("coast"), "2,1": T("coast"), "0,1": T("grass", { h: true, x: "mine" }),
-      "-1,1": T("plains", { h: true, x: "mine" }), "-1,0": T("grass", { x: "quarry" }),
-      "1,-1": T("grass", { x: "strategic" }),
+      "1,0": T("grass"), "2,0": T("flood"), "0,1": T("grass"), "1,1": T("grass"),
+      "2,-1": T("grass"), "1,-1": T("grass"),
+      "-1,2": T("coast"),
+      "2,1": T("grass", { h: true, x: "mine" }), "1,2": T("plains", { x: "quarry" }), "0,2": T("grass", { x: "strategic" }),
     },
-    rivers: [["1,0", "2,0"], ["2,0", "2,-1"], ["1,0", "1,-1"], ["1,-1", "2,-1"]],
-    note: "用水路・ダム・運河で+6が基本。鉱山・採石場・戦略資源でさらに上乗せ。",
+    rivers: [["1,0", "1,-1"], ["1,0", "2,0"], ["2,0", "2,-1"]],
+    note: "用水路（都心隣接）・ダム（氾濫原）・運河（平地）を工業地帯の周囲に配置。3つ揃えば+6。",
   },
   {
     id: "iz-mines",

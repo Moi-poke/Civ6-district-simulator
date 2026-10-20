@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { RotateCcw, Lightbulb, Trophy, CheckCircle2, Info, ChevronRight, Waves, AlertTriangle, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SolverWorker from "./solver.worker.js?worker";
 
 
-import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, VIEWBOX, key, coords, center, hexPoints, hexDist, EDGES, buildRivers, riverSides, citiesOf, cityOf, citiesWithin, cityPop, tileOf, withDistrict, checkDistrict, validateAll, allScores, totalOf, optimize, templates, buildMap, riverList, WONDERS, HILLS_SHORT } from "./rules.js";
+import { TERRAIN, FEATURES, EXTRAS, DISTRICTS, REMOVABLE_EXTRAS, REMOVABLE_FEATURES, isSpecialty, SIZE, VIEWBOX, key, coords, IN_GRID, center, hexPoints, hexDist, EDGES, EDGE_BY_KEY, buildRivers, riverSides, citiesOf, cityOf, citiesWithin, cityPop, tileOf, withDistrict, checkDistrict, validateAll, allScores, totalOf, optimize, templates, buildMap, riverList, WONDERS, HILLS_SHORT } from "./rules.js";
 
 
 /* =========================================================
@@ -89,11 +89,23 @@ export default function App() {
   const [optPick, setOptPick] = useState(["campus", "holy_site", "theater"]);
   const [optExtraPick, setOptExtraPick] = useState([]);
   const [solving, setSolving] = useState(false);
+  const [best, setBest] = useState(null);
+  const [bestLoading, setBestLoading] = useState(false);
   const [ghost, setGhost] = useState(null);
+  const bestWorkerRef = useRef(null);
+  const solveSeqRef = useRef(0);
   const [hoverEdge, setHoverEdge] = useState(null);
   const [saveName, setSaveName] = useState("");
   const [saves, setSaves] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("civ6saves") || "{}"); } catch { return {}; }
+    try {
+      const parsed = JSON.parse(localStorage.getItem("civ6saves") || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      const out = {};
+      for (const [name, sv] of Object.entries(parsed)) {
+        if (sv && typeof sv === "object" && sv.map && typeof sv.map === "object" && Array.isArray(sv.rivers)) out[name] = sv;
+      }
+      return out;
+    } catch { return {}; }
   });
 
   const puzzle = mode === "puzzle";
@@ -112,7 +124,28 @@ export default function App() {
   const invalid = useMemo(() => validateAll(activeMap, rv), [activeMap, rv]);
   const total = totalOf(scores);
   const ghostScores = useMemo(() => (ghost ? allScores(ghost.map, rv) : null), [ghost, rv]);
-  const best = useMemo(() => (puzzle ? optimize(puzzleBase, puzzleRivers, template.allowed) : null), [puzzle, puzzleBase, puzzleRivers, template]);
+
+  // パズル最適値は Worker で非同期計算（UI を止めない）
+  useEffect(() => {
+    if (bestWorkerRef.current) { bestWorkerRef.current.terminate(); bestWorkerRef.current = null; }
+    if (!puzzle) return;
+    const worker = new SolverWorker();
+    bestWorkerRef.current = worker;
+    worker.onmessage = (e) => {
+      const sol = e.data && e.data.ok ? e.data.sol : null;
+      setBest(sol);
+      setBestLoading(false);
+      bestWorkerRef.current = null;
+      worker.terminate();
+    };
+    worker.onerror = () => { setBest(null); setBestLoading(false); bestWorkerRef.current = null; worker.terminate(); };
+    worker.postMessage({ baseMap: puzzleBase, rivers: [...puzzleRivers.set], list: template.allowed, budget: { nodes: 1500000, ms: 20000 } });
+    return () => worker.terminate();
+  }, [puzzle, puzzleBase, puzzleRivers, template]);
+
+  useEffect(() => () => {
+    if (bestWorkerRef.current) bestWorkerRef.current.terminate();
+  }, []);
 
   const sel = selected ? tileOf(activeMap, selected) : null;
   const selScore = selected ? scores[selected] : null;
@@ -145,7 +178,21 @@ export default function App() {
       if (brush === "erase") {
         if (tile.d === "city") {
           if (citiesOf(activeMap).length <= 1) return setMsg("最後の都心は消せません");
-          return setMap((m) => { const n = { ...m }; delete n[k]; return n; });
+          setMsg("都心を削除しました（所有都市の指定は解除されます）");
+          return setMap((m) => {
+            const n = { ...m };
+            const t = { ...tile };
+            delete t.pop; delete t.name; t.d = null;
+            n[k] = t;
+            for (const kk of Object.keys(n)) {
+              if (n[kk] && n[kk].owner === k) {
+                const t2 = { ...n[kk] };
+                delete t2.owner;
+                n[kk] = t2;
+              }
+            }
+            return n;
+          });
         }
         return setMap((m) => ({ ...m, [k]: { ...tile, d: null } }));
       }
@@ -219,6 +266,10 @@ export default function App() {
   }
 
   function loadTemplate(t, asPuzzle) {
+    solveSeqRef.current++;
+    setSolving(false);
+    setBest(null);
+    setBestLoading(!!asPuzzle);
     setTemplate(t);
     setAnswer({});
     setChecked(false);
@@ -246,16 +297,23 @@ export default function App() {
     if (solving) return;
     setSolving(true);
     setMsg("探索中…（盤面は操作可能です）");
+    const seq = ++solveSeqRef.current;
     const worker = new SolverWorker();
     worker.onmessage = (e) => {
-      setSolving(false);
       worker.terminate();
+      if (seq !== solveSeqRef.current) return;
+      setSolving(false);
       const sol = e.data && e.data.ok ? e.data.sol : null;
       if (!sol) { setGhost(null); return setMsg("条件を満たす配置がありません（設置制限・人口スロット・1都市1つ制限を確認）"); }
       setGhost(sol);
       setMsg(`探索完了：盤面全体の隣接合計 +${sol.total}（点線が提案位置）${sol.timedOut ? " ※時間切れのため暫定解です" : ""}`);
     };
-    worker.onerror = () => { setSolving(false); worker.terminate(); setMsg("探索中にエラーが発生しました"); };
+    worker.onerror = () => {
+      worker.terminate();
+      if (seq !== solveSeqRef.current) return;
+      setSolving(false);
+      setMsg("探索中にエラーが発生しました");
+    };
     worker.postMessage({ baseMap: map, rivers: [...rv.set], list: picks, budget: { nodes: 1500000, ms: 20000 } });
   }
 
@@ -285,20 +343,46 @@ export default function App() {
   }
 
   const SAVE_KEY = "civ6saves";
+  function validateBoardData(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) return "データが不正です";
+    if (!data.map || typeof data.map !== "object" || Array.isArray(data.map)) return "盤面データが不正です";
+    if (!Array.isArray(data.rivers)) return "川データが不正です";
+    for (const [k, t] of Object.entries(data.map)) {
+      if (!IN_GRID.has(k)) return `盤面外のタイル: ${k}`;
+      if (!t || typeof t !== "object" || Array.isArray(t)) return `タイルデータが不正: ${k}`;
+      if (!TERRAIN[t.t]) return `不明な地形: ${t.t} (${k})`;
+      if (t.f && !FEATURES[t.f]) return `不明な地物: ${t.f} (${k})`;
+      if (t.x && !EXTRAS[t.x]) return `不明な資源・改善: ${t.x} (${k})`;
+      if (t.d && !DISTRICTS[t.d] && !(typeof t.d === "string" && t.d.startsWith("wonder:"))) return `不明な区域: ${t.d} (${k})`;
+      if (t.pop != null && (!Number.isFinite(t.pop) || t.pop < 1 || t.pop > 20)) return `不正な人口: ${k}`;
+    }
+    for (const e of data.rivers) {
+      if (typeof e !== "string" || !EDGE_BY_KEY[e]) return `不正な川の辺: ${e}`;
+    }
+    return null;
+  }
   function persistSaves(next) {
-    setSaves(next);
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(next)); } catch { /* quota */ }
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(next));
+      setSaves(next);
+      return null;
+    } catch (err) {
+      return err && err.name === "QuotaExceededError" ? "保存容量が不足しています" : "保存に失敗しました";
+    }
   }
   function saveBoard() {
     const name = saveName.trim() || `保存 ${new Date().toLocaleString("ja-JP")}`;
-    const next = { ...saves, [name]: { map, rivers, at: Date.now() } };
-    persistSaves(next);
+    const next = { ...saves, [name]: { v: 1, map, rivers, at: Date.now() } };
+    const err = persistSaves(next);
+    if (err) return setMsg(err);
     setSaveName("");
     setMsg(`保存しました：${name}`);
   }
   function loadBoard(name) {
     const sv = saves[name];
     if (!sv) return setMsg("保存データがありません");
+    const err = validateBoardData(sv);
+    if (err) return setMsg(`読み込めません：${err}`);
     setMap(JSON.parse(JSON.stringify(sv.map)));
     setRivers([...sv.rivers]);
     setGhost(null); setSelected(null); setChecked(false);
@@ -311,7 +395,7 @@ export default function App() {
     setMsg(`削除しました：${name}`);
   }
   function exportBoard() {
-    const blob = new Blob([JSON.stringify({ map, rivers }, null, 1)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ v: 1, map, rivers }, null, 1)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "civ6-board.json";
@@ -323,11 +407,12 @@ export default function App() {
     reader.onload = () => {
       try {
         const data = JSON.parse(reader.result);
-        if (!data.map || !Array.isArray(data.rivers)) throw new Error("bad format");
+        const err = validateBoardData(data);
+        if (err) { setMsg(`インポートに失敗しました：${err}`); return; }
         setMap(data.map); setRivers(data.rivers);
         setGhost(null); setSelected(null);
         setMsg("インポートしました");
-      } catch { setMsg("インポートに失敗しました（形式不正）"); }
+      } catch { setMsg("インポートに失敗しました（JSON が不正です）"); }
     };
     reader.readAsText(file);
   }
@@ -342,7 +427,7 @@ export default function App() {
             <p className="text-slate-400 mt-2">川はヘクスの「辺」、設置条件は区域ごとに判定。置けない場所は理由を表示します。複数都市対応（間隔4以上）。</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => { setMode("sandbox"); setMsg(null); }} className={mode === "sandbox" ? "bg-cyan-500 text-slate-950" : "bg-slate-800"}>自由配置</Button>
+            <Button onClick={() => { setMode("sandbox"); setBestLoading(false); setMsg(null); }} className={mode === "sandbox" ? "bg-cyan-500 text-slate-950" : "bg-slate-800"}>自由配置</Button>
             <Button onClick={() => loadTemplate(template, true)} className={puzzle ? "bg-amber-400 text-slate-950" : "bg-slate-800"}>問題モード</Button>
           </div>
         </header>
@@ -464,7 +549,7 @@ export default function App() {
               )}
               <div className="absolute top-3 right-3 z-10 rounded-xl bg-slate-950/90 px-3 py-2 border border-slate-600 text-right">
                 <div className="text-xs text-slate-400">盤面の隣接合計</div>
-                <div className="text-2xl font-black text-cyan-300">+{total}{puzzle && best ? <span className="text-sm text-slate-400"> / 最適 {checked ? `+${best.total}` : "???"}</span> : null}</div>
+                <div className="text-2xl font-black text-cyan-300">+{total}{puzzle ? <span className="text-sm text-slate-400"> / 最適 {bestLoading ? "計算中…" : checked && best ? `+${best.total}${best.timedOut ? "（暫定）" : ""}` : "???"}</span> : null}</div>
               </div>
               <svg viewBox={VIEWBOX} className="w-full bg-gradient-to-br from-emerald-950 to-slate-950">
                 {coords.map(({ q, r }) => {
@@ -624,7 +709,7 @@ export default function App() {
           <CardContent className="pt-6 grid md:grid-cols-3 gap-5 text-sm">
             <div>
               <b className="text-cyan-300">実装した設置制限</b>
-              <p className="text-slate-400 mt-1">山岳・自然遺産・高級/戦略資源には不可（都心は例外で陸地のみ）。港/ウォーターパークは陸地隣接の沿岸/湖。用水路は都心隣接＋川/湖/オアシス/山岳。ダムは氾濫原＋川が2辺以上、1本の川に1つ。運河は水域隣接の陸地（都心隣接または2水域に接する）。都心同士は4タイル以上。区域は都心から3タイル以内。専門区域は人口スロット制（1+floor((pop-1)/3)）。専門区域・娯楽・ウォーターパークは1都市1つ、政府複合施設は1文明1つ。用水路・ダムは複数可。</p>
+              <p className="text-slate-400 mt-1">山岳・自然遺産・オアシス・高級/戦略資源・使用不可には不可（都心は陸地のみ、丘陵は地形と両立）。氾濫原はダム以外の区域不可。港/ウォーターパークは陸地隣接の沿岸/湖。用水路は都心隣接＋川/湖/オアシス/山岳（1都市1つ）。ダムは氾濫原＋川が2辺以上、1本の川に1つ。運河は平地で水域隣接（都心隣接または2水域）。都心同士は4タイル以上、区域は都心から3タイル以内。専門区域は人口スロット制。専門区域・娯楽・ウォーターパーク・用水路は1都市1つ（娯楽とWPは併存不可）、政府複合施設・外交街は1文明1つ。ダム・運河は複数可。</p>
             </div>
             <div>
               <b className="text-amber-300">未反映・簡略化</b>

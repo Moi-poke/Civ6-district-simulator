@@ -33,7 +33,7 @@ npm run preview      # serve dist/
 npm run lint         # oxlint
 ```
 
-- Runtime: Node 20.x (CI `node-version: 20`); Vite 8 engine floor `^20.19.0 || >=22.12.0` — ensure recent Node locally. `import.meta.dirname` in `vite.config.js` needs Node ≥20.11.
+- Runtime: Node 20.x locally; CI uses `node-version: 22`. Vite 8 engine floor `^20.19.0 || >=22.12.0` — ensure recent Node locally. `import.meta.dirname` in `vite.config.js` needs Node ≥20.11.
 - Package manager: npm only. Do not add yarn/pnpm lockfiles.
 - Path alias: `@` → `src/` (defined in `vite.config.js`; no `jsconfig.json`).
 - Tailwind v4 via Vite plugin (CSS-first; no `tailwind.config.js`).
@@ -70,5 +70,5 @@ npm run lint         # oxlint
 
 ## Testing & QA
 
-- **Vitest** (`npm test`, `src/rules.test.js`, 22 tests) covers placement/scoring/solver/templates. CI runs `npm run lint` + `npm run build` (tests local-only for now).
-- Natural fit if adding tests: Vitest (Vite-native) in `vite.config.js`. High-value pure targets: `scoreAt`, `checkDistrict`, `optimize`, `buildRivers`, and the 6 templates.
+- **Vitest** (`npm test`, `src/rules.test.js`, 35 tests) covers placement/scoring/solver/templates/persistence-adjacent rules. CI runs `npm run lint` + `npm test` + `npm run build`.
+- Natural fit if adding tests: Vitest (Vite-native) in `vite.config.js`. High-value pure targets: `scoreAt`, `checkDistrict`, `optimize`, `buildRivers`, and the 20 templates.

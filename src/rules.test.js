@@ -25,7 +25,7 @@ describe("civ6lib parity: uniqueness + slots", () => {
     expect(ONE_PER_CITY.has("aerodrome")).toBe(true);
     expect(ONE_PER_CITY.has("preserve")).toBe(true);
     expect(ONE_PER_CITY.has("neighborhood")).toBe(false);
-    expect(ONE_PER_CITY.has("aqueduct")).toBe(false);
+    expect(ONE_PER_CITY.has("aqueduct")).toBe(true);
     expect(ONE_PER_CIV.has("government")).toBe(true);
     expect(ONE_PER_CIV.has("diplomatic")).toBe(true);
   });
@@ -163,6 +163,41 @@ describe("hills flag + tundra/snow", () => {
     const map = { "0,0": city(), "1,0": { t: "tundra" }, "2,0": { t: "snow" } };
     expect(checkDistrict(map, R(), "1,0", "campus")).toBeNull();
     expect(checkDistrict(map, R(), "2,0", "holy_site")).toBeNull();
+  });
+});
+
+describe("terrain restrictions: flood/oasis/canal/city", () => {
+  test("floodplains block districts but allow dam and wonders", () => {
+    const map = { "0,0": city(), "1,0": { t: "flood" }, "2,0": { t: "flood" } };
+    expect(checkDistrict(map, R(), "1,0", "campus")).toMatch(/氾濫原/);
+    expect(checkDistrict(map, R(), "1,0", "aqueduct")).toMatch(/氾濫原/);
+    expect(checkDistrict(map, R(), "2,0", "dam")).not.toMatch(/氾濫原/);
+    expect(checkDistrict(map, R(), "1,0", "wonder:petra")).toBeNull();
+  });
+  test("oasis blocks city, district, wonder and extra", () => {
+    const map = { "0,0": city(), "1,0": { t: "desert", f: "oasis" }, "2,0": { t: "desert", f: "oasis" } };
+    expect(checkDistrict(map, R(), "1,0", "campus")).toMatch(/オアシス/);
+    expect(checkDistrict(map, R(), "1,0", "wonder:pyramids")).toMatch(/オアシス/);
+    expect(checkDistrict(map, R(), "2,0", "city")).toMatch(/オアシス/);
+    expect(checkExtra(map, R(), "1,0", "quarry")).toMatch(/オアシス/);
+  });
+  test("city center cannot overwrite a district and clears woods/mine on settle", () => {
+    const map = { "0,0": city(), "1,0": { t: "grass", d: "campus" } };
+    expect(checkDistrict(map, R(), "1,0", "city")).toMatch(/既に/);
+    const withWoods = { "0,0": city(), "4,0": { t: "grass", f: "woods", x: "mine" } };
+    expect(checkDistrict(withWoods, R(), "4,0", "city")).toBeNull();
+  });
+  test("aqueduct is one per city", () => {
+    const map = { "0,0": city(10), "1,0": { t: "grass", d: "aqueduct" }, "-1,1": { t: "lake" } };
+    expect(checkDistrict(map, R(), "0,1", "aqueduct")).toMatch(/1都市に1つ/);
+  });
+  test("entertainment and water park are mutually exclusive per city", () => {
+    const map = { "0,0": city(10), "1,0": { t: "grass", d: "entertainment" }, "-1,0": { t: "coast" } };
+    expect(checkDistrict(map, R(), "-1,0", "water_park")).toMatch(/同じ都市/);
+  });
+  test("canal requires flat land", () => {
+    const map = { "0,0": city(), "1,0": { t: "grass", h: true }, "0,1": { t: "coast" } };
+    expect(checkDistrict(map, R(), "1,0", "canal")).toMatch(/平地/);
   });
 });
 
