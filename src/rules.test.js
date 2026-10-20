@@ -226,6 +226,14 @@ describe("multi-city ownership", () => {
   });
 });
 
+describe("wonder uniqueness", () => {
+  test("same specific wonder cannot be built twice", () => {
+    const map = { "0,0": city(), "1,0": { t: "desert", d: "wonder:pyramids" }, "2,0": { t: "desert" } };
+    expect(checkDistrict(map, R(), "2,0", "wonder:pyramids")).toMatch(/既に建設/);
+    expect(checkDistrict(map, R(), "2,0", "wonder:petra")).toBeNull();
+  });
+});
+
 describe("validateAll + extras", () => {
   test("invalid items are flagged; valid maps pass", () => {
     const bad = { "0,0": city(), "1,0": { t: "mountain", d: "campus" } };

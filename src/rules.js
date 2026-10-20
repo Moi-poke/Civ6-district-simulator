@@ -280,6 +280,7 @@ function checkDistrict(map, rv, k, d) {
   if (tile.d) return "既に区域・都心・遺産があります";
   const wk = wonderKeyOf(d);
   const w = wk ? WONDERS[wk] : null;
+  if (wk && others.length) return `${w.label}は既に建設されています（世界に1つ）`;
   // ユニバーサル制限（遺産の固有条件は後段で処理）
   if (tile.t === "mountain" && wk !== "machu_picchu") return "山岳には区域・遺産を置けません";
   if (wk === "machu_picchu" && tile.t !== "mountain") return "マチュピチュは山岳タイルに建設する必要があります";
