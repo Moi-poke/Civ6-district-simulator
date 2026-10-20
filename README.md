@@ -161,7 +161,7 @@ npm run lint     # oxlint
 ├── src/
 │   ├── App.jsx                 # UI
 │   ├── rules.js                # ルールエンジン（配置・隣接・ソルバー・テンプレート）
-│   ├── rules.test.js           # Vitest 回帰テスト（35 件）
+│   ├── rules.test.js           # Vitest 回帰テスト（36 件）
 │   ├── solver.worker.js        # ソルバー用 Web Worker
 │   ├── main.jsx
 │   ├── index.css

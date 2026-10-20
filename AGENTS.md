@@ -70,5 +70,5 @@ npm run lint         # oxlint
 
 ## Testing & QA
 
-- **Vitest** (`npm test`, `src/rules.test.js`, 35 tests) covers placement/scoring/solver/templates/persistence-adjacent rules. CI runs `npm run lint` + `npm test` + `npm run build`.
+- **Vitest** (`npm test`, `src/rules.test.js`, 36 tests) covers placement/scoring/solver/templates/persistence-adjacent rules. CI runs `npm run lint` + `npm test` + `npm run build`.
 - Natural fit if adding tests: Vitest (Vite-native) in `vite.config.js`. High-value pure targets: `scoreAt`, `checkDistrict`, `optimize`, `buildRivers`, and the 20 templates.
